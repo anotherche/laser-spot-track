@@ -60,7 +60,8 @@ of picture instability and view perspective.
 
 The project uses ideas and code of 
 1. Template Matching by Qingzong Tseng (based on opencv)
-2. Exif Metadata Library by Drew Noakes
+2. javacv (java interface to OpenCV) by Samuel Audet 
+3. Exif Metadata Library by Drew Noakes
  */
 
 
