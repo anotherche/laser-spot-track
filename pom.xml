@@ -18,7 +18,7 @@
 
 	<name>plugins/Laser_Spot_Track4.jar</name>
 	<description>Tracks laser spot in stack. Perspective correction. ImageJ plugin.</description>
-	<url>http://sites.imagej.net/Anotherche/plugins/</url>
+	<url>http://imagej.net/PhotoBend</url>
 	<inceptionYear>2017</inceptionYear>
 	 <organization>
         <name>ISSCM SB RAS</name>
@@ -28,7 +28,7 @@
 	<licenses>
 		<license>
 			<name>GNU General Public License</name>
-			<url>http://www.gnu.org/licenses/gpl.html</url>
+			<url>http://www.gnu.org/licenses/gpl.txt</url>
 			<distribution>repo</distribution>
 		</license>
 	</licenses>

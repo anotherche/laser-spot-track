@@ -91,7 +91,7 @@ public class cvLaser_Spot_Track4 implements PlugInFilter, DialogListener {
     		disX_mark4=0.0, disY_mark4=0.0,
     		dX_pix=0.0, dY_pix=0.0,
     		spotX0=0.0, spotY0=0.0,
-    		X_abs, Y_abs,
+    		X_abs, Y_abs, 
     		dX=0.0, dY=0.0, dL=0.0;
     
     /*
@@ -457,6 +457,7 @@ public class cvLaser_Spot_Track4 implements PlugInFilter, DialogListener {
             rt.addValue("X_abs", X_abs);
             rt.addValue("Y_abs", Y_abs);
             rt.addValue("dL", dL);
+           
 			
 			rt.setDecimalPlaces(2, 2);
 			rt.setDecimalPlaces(3, 2);
@@ -577,6 +578,7 @@ public class cvLaser_Spot_Track4 implements PlugInFilter, DialogListener {
 		                rt.addValue("X_abs", X_abs);
 		                rt.addValue("Y_abs", Y_abs);
 		                rt.addValue("dL", dL);
+		               
 		                
 						rt.setDecimalPlaces(2, 2);
 						rt.setDecimalPlaces(3, 2);
@@ -606,7 +608,7 @@ public class cvLaser_Spot_Track4 implements PlugInFilter, DialogListener {
 		            if (y_height==0.0) y_height=1.0;
 		            double y_min=displacement_min-0.1*y_height,
 		            	   y_max=displacement_max+0.1*y_height;
-		            Plot plot1 = new Plot("Displacement Plot","Time, s","Displacement");
+		            Plot plot1 = new Plot("Displacement Plot","Time, s","Displacement, mm");
 		            plot1.setLimits(0, seconds, y_min, y_max);
 		    		plot1.addPoints(time_list, displacement_list, Plot.LINE);
 		    		ImageProcessor plotIp = plot1.getProcessor();
@@ -778,10 +780,10 @@ public class cvLaser_Spot_Track4 implements PlugInFilter, DialogListener {
 						            		            	rt.addValue("File", stack.getSliceLabel(vstack.getSize()));
 						            		            	rt.addValue("dX_pix", dX_pix);
 						            		                rt.addValue("dY_pix", dY_pix);
-						            		                rt.addValue("dX", dX);
-						            		                rt.addValue("dY", dY);
+						            		                rt.addValue("X_abs", X_abs);
+						            		                rt.addValue("Y_abs", Y_abs);
 						            		                rt.addValue("dL", dL);
-						            		                
+						            		               
 						            		                
 						            						rt.setDecimalPlaces(2, 2);
 						            						rt.setDecimalPlaces(3, 2);
@@ -1929,25 +1931,51 @@ public class cvLaser_Spot_Track4 implements PlugInFilter, DialogListener {
         		m3x=refX_mark3+disX_mark3,m3y=refY_mark3+disY_mark3,
         		m4x=refX_mark4+disX_mark4,m4y=refY_mark4+disY_mark4,
        
-        ax=m4x-m1x,ay=m4y-m1y,
-        bx=m2x-m1x,by=m2y-m1y,
-        cx=m1x+m3x-m2x-m4x,cy=m1y+m3y-m2y-m4y,
-        a_invX,a_invY,a_inv_mod,
-        b_invX,b_invY,b_inv_mod,
-        rx=refX_spot+disX_spot-m1x, ry=refY_spot+disY_spot-m1y;
-        //X,Y;
+        /*
+		ax=m4x-m1x,ay=m4y-m1y,
+		bx=m2x-m1x,by=m2y-m1y,
+		cx=m1x+m3x-m2x-m4x,cy=m1y+m3y-m2y-m4y,
+		a_invX,a_invY,a_inv_mod,
+		b_invX,b_invY,b_inv_mod,
+		rx=refX_spot+disX_spot-m1x, ry=refY_spot+disY_spot-m1y;
+				a_inv_mod=ax*by-ay*bx;
+				b_inv_mod=a_inv_mod;
+				a_invX=by/a_inv_mod;
+				a_invY=-bx/a_inv_mod;
+				b_invX=-ay/a_inv_mod;
+				b_invY=ax/a_inv_mod;
+		*/
+        	   a1x=m4x-m1x,a1y=m4y-m1y,
+               b1x=m2x-m1x,b1y=m2y-m1y,
+               a2x=m3x-m2x,a2y=m3y-m2y,
+               b2x=m3x-m4x,b2y=m3y-m4y,
+               
+               rx=refX_spot+disX_spot-m1x, ry=refY_spot+disY_spot-m1y,
+               
+               AX=a1x*(b1y-b2y)+a1y*(b2x-b1x),
+               BX=-a1x*b1y+a1y*b1x - rx*(b1y-b2y)-ry*(b2x-b1x),
+               CX=-rx*b1y+ry*b1x,
+               
+               
+               AY=b1x*(a1y-a2y)+b1y*(a2x-a1x),
+               BY=-b1x*a1y+b1y*a1x - rx*(a1y-a2y)-ry*(a2x-a1x),
+               CY=-rx*a1y+ry*a1x;
         
-        a_inv_mod=ax*by-ay*bx;
-        b_inv_mod=a_inv_mod;
+        //double X_abs_new, Y_abs_new;
         
-        a_invX=by/a_inv_mod;
-        a_invY=-bx/a_inv_mod;
+        if (AX==0.0) {
+        	X_abs=CX/BX*markDist;
+        	Y_abs=CY/BY*markDist;
+        } else {
+        	double DX=Math.sqrt(BX*BX+4.0*AX*CX),
+        			DY=Math.sqrt(BY*BY+4.0*AY*CY);
+        	X_abs=(DX-BX)/AX/2.0*markDist;
+        	Y_abs=(-DY-BY)/AY/2.0*markDist;
+        }
         
-        b_invX=-ay/a_inv_mod;
-        b_invY=ax/a_inv_mod;
         
-        X_abs=(rx*a_invX+ry*a_invY)*(1.0-(cx*a_invX+cy*a_invY)*(rx*b_invX+ry*b_invY))*markDist;
-        Y_abs=(rx*b_invX+ry*b_invY)*(1.0-(cx*b_invX+cy*b_invY)*(rx*a_invX+ry*a_invY))*markDist;
+        //X_abs=(rx*a_invX+ry*a_invY)*(1.0-(cx*a_invX+cy*a_invY)*(rx*b_invX+ry*b_invY))*markDist;
+        //Y_abs=(rx*b_invX+ry*b_invY)*(1.0-(cx*b_invX+cy*b_invY)*(rx*a_invX+ry*a_invY))*markDist;
         
         if (firstPoint) {
         	spotX0=X_abs;

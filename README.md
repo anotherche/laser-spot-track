@@ -11,6 +11,8 @@ The output is the time dependence of spot dislacement given in units of the squa
 side length. Usage of the template with 4 marks allows to compensate for the effects 
 of picture instability and view perspective.
 
+See details at http://imagej.net/PhotoBend
+
 The project uses ideas and code of 
 1. Template Matching by Qingzong Tseng (based on opencv)
 2. javacv (java interface to OpenCV) by Samuel Audet 
