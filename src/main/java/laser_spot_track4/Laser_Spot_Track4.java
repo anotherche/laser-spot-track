@@ -1,20 +1,23 @@
-package Laser_Spot_Track4;
+package laser_spot_track4;
 
 import ij.*;
 import ij.process.*;
 import ij.gui.*;
 import ij.io.*;
 import java.io.*;
+import java.time.Duration;
 //import java.util.*;
+import java.time.Instant;
 
 //import org.bytedeco.javacv.*;
 import org.bytedeco.javacpp.*;
 import org.bytedeco.javacv.Java2DFrameConverter;
+import org.bytedeco.javacv.Java2DFrameUtils;
 import org.bytedeco.javacv.OpenCVFrameConverter;
 //import org.bytedeco.javacv.OpenCVFrameConverter.ToIplImage;
 import org.bytedeco.javacv.OpenCVFrameConverter.ToMat;
-import org.joda.time.DateTime;
-import org.joda.time.Duration;
+//import org.joda.time.DateTime;
+//import org.joda.time.Duration;
 
 
 import com.drew.imaging.ImageMetadataReader;
@@ -38,12 +41,17 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 //import javax.swing.JTextField;
 
-import static org.bytedeco.javacpp.opencv_core.*;
-import static org.bytedeco.javacpp.opencv_imgproc.*;
-import org.bytedeco.javacpp.indexer.*;
-import static org.bytedeco.javacpp.opencv_core.Mat;
-import static org.bytedeco.javacpp.opencv_core.Point;
+//import static org.bytedeco.javacpp.opencv_core.*;
+//import static org.bytedeco.javacpp.opencv_imgproc.*;
+import org.bytedeco.opencv.opencv_core.*;
+import org.bytedeco.opencv.opencv_core.Point;
+//import org.bytedeco.opencv.opencv_imgproc.*;
 
+import static org.bytedeco.opencv.global.opencv_core.*;
+import static org.bytedeco.opencv.global.opencv_imgproc.*;
+
+
+import org.bytedeco.javacpp.indexer.*;
 
 /* This is a Maven project implementing an ImageJ plugin providing trackig of 
 a spot moving in a field with 4 reference marks. It was created for automatization 
@@ -66,7 +74,7 @@ The project uses ideas and code of
 
 
 
-public class cvLaser_Spot_Track4 implements PlugInFilter, DialogListener {
+public class Laser_Spot_Track4 implements PlugInFilter, DialogListener {
 
     ImagePlus imp, ref_Image, spot_ref, spot_tpl, holder_ref, mark1_ref, mark2_ref, mark3_ref, mark4_ref;
 
@@ -77,7 +85,7 @@ public class cvLaser_Spot_Track4 implements PlugInFilter, DialogListener {
     PointRoi proi_spot,proi_att,proi_mark1,proi_mark2,proi_mark3,proi_mark4;
     int method=5, refSlice, sArea = 50, templSize=120, anStep=0;
     double seconds=0, timeStep=1.0, markDist=100.0;
-    DateTime first_shot_time; 
+    Instant first_shot_time; 
     int width, height, refBitDepth, refX_spot, refY_spot, refX_att=0, refY_att=0,
     		refX_mark1, refY_mark1, 
     		refX_mark2, refY_mark2,
@@ -178,9 +186,14 @@ public class cvLaser_Spot_Track4 implements PlugInFilter, DialogListener {
 */
 	
     public int setup(String arg, ImagePlus imp) {
-        this.imp = imp;
-        
-        return DOES_8G + DOES_16 +  DOES_32 + DOES_RGB + STACK_REQUIRED;
+    	 this.imp = imp;
+         if (imp==null || imp.getStack()==null || imp.getStackSize()<2 || !imp.getStack().isVirtual()) {
+         	IJ.run("Image Sequence...");
+         	this.imp = IJ.getImage();
+         	
+         }
+         
+         return NO_IMAGE_REQUIRED + DOES_8G + DOES_16 +  DOES_32 + DOES_RGB + STACK_REQUIRED;
     }
 
     
@@ -845,7 +858,7 @@ public class cvLaser_Spot_Track4 implements PlugInFilter, DialogListener {
         new WaitForUserDialog("Laser Spot Tracking", "The tracking is finished.").show();
     }
 	
-	private DateTime getShotTime(String imageFilePath)
+	private Instant getShotTime(String imageFilePath)
 	{
 		 // the creation time of the image is taken from the EXIF metadata
         
@@ -857,7 +870,7 @@ public class cvLaser_Spot_Track4 implements PlugInFilter, DialogListener {
 		try {
 			metadata = ImageMetadataReader.readMetadata(jpegFile);
 			ExifSubIFDDirectory md_directory = metadata.getFirstDirectoryOfType(ExifSubIFDDirectory.class);
-		    return new DateTime(md_directory.getDateOriginal());
+		    return md_directory.getDateOriginal().toInstant();//new DateTime(md_directory.getDateOriginal());
 			
 		} catch (Exception e) {
 			setAltTimeMeasure();
@@ -1808,9 +1821,9 @@ public class cvLaser_Spot_Track4 implements PlugInFilter, DialogListener {
         
         if (ExifTime)
         {
-             DateTime shot_time = getShotTime(imp.getOriginalFileInfo().directory + stack.getSliceLabel(slice));
-             
-        	if (shot_time!=null) seconds = (double)((new Duration(first_shot_time,shot_time)).getStandardSeconds());
+             Instant shot_time = getShotTime(imp.getOriginalFileInfo().directory + stack.getSliceLabel(slice));
+             		 
+        	if (shot_time!=null) seconds = Duration.between(first_shot_time, shot_time).toNanos()/1000000000.0;//(double)((new Duration(first_shot_time,shot_time)).getStandardSeconds());
         	else 
         	{	
         		ExifTime=false;
@@ -2041,10 +2054,10 @@ public class cvLaser_Spot_Track4 implements PlugInFilter, DialogListener {
 	*/
 	public static Mat toMatcv(BufferedImage bufImage) {
 
-	    
-	    ToMat matConverter = new OpenCVFrameConverter.ToMat();
-	    Java2DFrameConverter java2dConverter = new Java2DFrameConverter();
-	    Mat mat =  matConverter.convert(java2dConverter.convert(bufImage));
+		Mat mat =  Java2DFrameUtils.toMat(bufImage);
+//	    ToMat matConverter = new OpenCVFrameConverter.ToMat();
+//	    Java2DFrameConverter java2dConverter = new Java2DFrameConverter();
+//	    Mat mat =  matConverter.convert(java2dConverter.convert(bufImage));
 	    return mat;
 	}
 	
