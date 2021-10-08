@@ -14,7 +14,7 @@
 
 	<groupId>anotherche.plugins.imagej</groupId> 
     <artifactId>Laser_Spot_Track4</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.2.0</version>
 
 	<name>plugins/Laser_Spot_Track4.jar</name>
 	<description>Tracks laser spot in stack. Perspective correction. ImageJ plugin.</description>
@@ -84,7 +84,7 @@
 		<main-class>Laser_Spot_Track4</main-class>
 		<license.licenseName>gpl</license.licenseName>
 		<license.copyrightOwners>ISSCM SB RAS</license.copyrightOwners>
-		<scijava.app.subdirectory>plugins/PhotoBend</scijava.app.subdirectory>
+		<scijava.app.subdirectory>plugins\PhotoBend</scijava.app.subdirectory>
 	</properties>
 
 	<dependencies>
@@ -274,7 +274,7 @@
    					<artifactId>videoinput</artifactId>
    				</exclusion>
 			</exclusions>
-			<version>1.5.3</version>
+			<version>1.5</version>
 		</dependency>
 		
 		

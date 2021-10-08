@@ -11,15 +11,7 @@ import java.time.Instant;
 
 //import org.bytedeco.javacv.*;
 import org.bytedeco.javacpp.*;
-import org.bytedeco.javacv.Java2DFrameConverter;
 import org.bytedeco.javacv.Java2DFrameUtils;
-import org.bytedeco.javacv.OpenCVFrameConverter;
-//import org.bytedeco.javacv.OpenCVFrameConverter.ToIplImage;
-import org.bytedeco.javacv.OpenCVFrameConverter.ToMat;
-//import org.joda.time.DateTime;
-//import org.joda.time.Duration;
-
-
 import com.drew.imaging.ImageMetadataReader;
 //import com.drew.imaging.ImageProcessingException;
 import com.drew.metadata.Metadata;
@@ -31,10 +23,12 @@ import java.awt.*;
 import ij.plugin.FolderOpener;
 //import ij.plugin.*;
 import ij.plugin.filter.*;
+import ij.plugin.frame.Recorder;
 import ij.measure.ResultsTable;
 import java.awt.image.BufferedImage;
 //import java.nio.FloatBuffer;
 import java.util.ArrayList;
+import java.util.Hashtable;
 
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
@@ -186,6 +180,14 @@ public class Laser_Spot_Track4 implements PlugInFilter, DialogListener {
 */
 	
     public int setup(String arg, ImagePlus imp) {
+    	
+    	int returnMask = NO_IMAGE_REQUIRED + DOES_8G + DOES_16 +  DOES_32 + DOES_RGB + STACK_REQUIRED;
+    	
+    	if (!CheckJavaCV("1.5", true, "opencv"))
+    	{
+    		return returnMask;
+    	}
+    	
     	 this.imp = imp;
          if (imp==null || imp.getStack()==null || imp.getStackSize()<2 || !imp.getStack().isVirtual()) {
          	IJ.run("Image Sequence...");
@@ -193,7 +195,7 @@ public class Laser_Spot_Track4 implements PlugInFilter, DialogListener {
          	
          }
          
-         return NO_IMAGE_REQUIRED + DOES_8G + DOES_16 +  DOES_32 + DOES_RGB + STACK_REQUIRED;
+         return returnMask;
     }
 
     
@@ -857,6 +859,52 @@ public class Laser_Spot_Track4 implements PlugInFilter, DialogListener {
 	        }
         new WaitForUserDialog("Laser Spot Tracking", "The tracking is finished.").show();
     }
+	
+private boolean CheckJavaCV(String version, boolean treatAsMinVer, String components) {
+		
+		String javaCVInstallCommand = "Install JavaCV libraries";
+    	Hashtable table = Menus.getCommands();
+		String javaCVInstallClassName = (String)table.get(javaCVInstallCommand);
+		if (javaCVInstallClassName==null) {
+			IJ.showMessage("JavaCV check", "JavaCV Installer not found.\n"
+					+"Please install it from from JavaCVInstaller update site:\n"
+					+"https://sites.imagej.net/JavaCVInstaller/");
+			return false;
+		}
+		
+		String installerCommand = "version="
+				+ version
+				+ " select_installation_option=[Install missing] "
+				+ (treatAsMinVer?"treat_selected_version_as_minimal_required ":"")
+				+ components;
+
+		//SR 2021-08-05 begin
+		boolean saveRecorder = Recorder.record;		//save state of the macro Recorder
+		Recorder.record = false;					//disable the macro Recorder to avoid the JavaCV installer plugin being recorded instead of this plugin
+		String saveMacroOptions = Macro.getOptions();
+		IJ.run("Install JavaCV libraries", installerCommand);
+		if (saveMacroOptions != null) Macro.setOptions(saveMacroOptions);
+		Recorder.record = saveRecorder;				//restore the state of the macro Recorder
+		//SR 2021-08-05 end
+
+		
+		String result = Prefs.get("javacv.install_result", "");
+		String launcherResult = Prefs.get("javacv.install_result_launcher", "");
+		
+		if (!(result.equalsIgnoreCase("success") && launcherResult.equalsIgnoreCase("success"))) {
+//			IJ.log("JavaCV installation state. Prerequisites: "+launcherResult+" JavaCV: "+ result);
+			if(result.indexOf("restart")>-1 || launcherResult.indexOf("restart")>-1) {
+				IJ.log("Please restart ImageJ to proceed with installation of necessary JavaCV libraries.");
+//				IJ.showMessage("FFmpeg Viseo Import/Export", "Please restart ImageJ to proceed with installation of necessary JavaCV libraries.");
+				return false;
+			} else {
+				IJ.log("JavaCV installation failed for above reason. Trying to use JavaCV as is...");
+				return true;
+			}
+		}
+//		IJ.log("JavaCV installation state. Prerequisites: "+launcherResult+" JavaCV: "+ result);
+		return true;
+	}
 	
 	private Instant getShotTime(String imageFilePath)
 	{
