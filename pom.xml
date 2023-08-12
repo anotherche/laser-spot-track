@@ -8,13 +8,13 @@
 	<parent>
 		<groupId>org.scijava</groupId>
 		<artifactId>pom-scijava</artifactId>
-		<version>29.0.0-beta-3</version>
+		<version>36.0.0</version>
 	<relativePath />
 	</parent>
 
 	<groupId>anotherche.plugins.imagej</groupId> 
     <artifactId>Laser_Spot_Track4</artifactId>
-    <version>0.2.0</version>
+    <version>0.4.0</version>
 
 	<name>plugins/Laser_Spot_Track4.jar</name>
 	<description>Tracks laser spot in stack. Perspective correction. ImageJ plugin.</description>
@@ -77,23 +77,19 @@
 		<url>https://github.com/anotherche/laser-spot-track</url>
 	</scm>
 
-	
-	
 	<properties>
 		<package-name>laser_spot_track4</package-name>
 		<main-class>Laser_Spot_Track4</main-class>
 		<license.licenseName>gpl</license.licenseName>
 		<license.copyrightOwners>ISSCM SB RAS</license.copyrightOwners>
-		<scijava.app.subdirectory>plugins\PhotoBend</scijava.app.subdirectory>
 	</properties>
 
 	<dependencies>
 		<dependency>
   			<groupId>net.imagej</groupId>
   			<artifactId>ij</artifactId>
-  		</dependency>
+		</dependency>
 		<!-- https://mvnrepository.com/artifact/org.bytedeco/javacv -->
-		
 		
 		<dependency>
 			<groupId>org.bytedeco</groupId>
@@ -273,8 +269,12 @@
    					<groupId>org.bytedeco</groupId>
    					<artifactId>videoinput</artifactId>
    				</exclusion>
+   				<exclusion>
+   					<groupId>org.openjfx</groupId>
+   					<artifactId>javafx-graphics</artifactId>
+   				</exclusion>
 			</exclusions>
-			<version>1.5</version>
+			<version>1.5.8</version>
 		</dependency>
 		
 		
@@ -282,12 +282,22 @@
 		<dependency>
 			<groupId>com.drewnoakes</groupId>
 			<artifactId>metadata-extractor</artifactId>
-			<version>2.14.0</version>
+			<version>2.18.0</version>
+		</dependency>
+		<dependency>
+			<groupId>net.imagej</groupId>
+			<artifactId>imagej-updater</artifactId>
 		</dependency>
 	</dependencies>
+	
+	<repositories>
+		<repository>
+			<id>scijava.public</id>
+			<url>https://maven.scijava.org/content/groups/public</url>
+		</repository>
+	</repositories>
 
 	<build>
-		
 		<plugins>
 			<plugin>
 	        <groupId>org.scijava</groupId>
@@ -301,26 +311,22 @@
 	              <goal>populate-app</goal>
 	            </goals>
 	            <configuration>
-	              <scijava.app.subdirectory>plugins/PhotoBend</scijava.app.subdirectory>
-	              <deleteOtherVersionsPolicy>never</deleteOtherVersionsPolicy>
+<!-- 	              <scijava.app.subdirectory>plugins/PhotoBend</scijava.app.subdirectory>-->
+	              <ignoreDependencies>false</ignoreDependencies>
+	              <deleteOtherVersionsPolicy>older</deleteOtherVersionsPolicy>
 <!-- 	              	          <deleteOtherVersions>false</deleteOtherVersions> -->
 	            </configuration>
 	          </execution>
 	        </executions>
 	        <configuration>
-	          <deleteOtherVersionsPolicy>never</deleteOtherVersionsPolicy>
+	          <deleteOtherVersionsPolicy>older</deleteOtherVersionsPolicy>
 <!-- 	              	          <deleteOtherVersions>false</deleteOtherVersions> -->
 	        </configuration>
 	      	</plugin>
 		
-		
-		
-		
-		
 			<plugin>
 				<artifactId>maven-jar-plugin</artifactId>
 				<configuration>
-					<connectionType>developerConnection</connectionType>
 					<archive>
 						<manifest>
 							<mainClass>${main-class}</mainClass>

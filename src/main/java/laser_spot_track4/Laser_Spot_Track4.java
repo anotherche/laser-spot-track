@@ -1,51 +1,52 @@
 package laser_spot_track4;
 
+import org.scijava.util.AppUtils;
+
+import net.imagej.updater.*;
+
 import ij.*;
 import ij.process.*;
 import ij.gui.*;
 import ij.io.*;
 import java.io.*;
 import java.time.Duration;
-//import java.util.*;
 import java.time.Instant;
 
-//import org.bytedeco.javacv.*;
-import org.bytedeco.javacpp.*;
-import org.bytedeco.javacv.Java2DFrameUtils;
 import com.drew.imaging.ImageMetadataReader;
-//import com.drew.imaging.ImageProcessingException;
 import com.drew.metadata.Metadata;
 import com.drew.metadata.exif.ExifSubIFDDirectory;
 
-import java.awt.*;
+import java.awt.Rectangle;
+import java.awt.AWTEvent;
 
 
 import ij.plugin.FolderOpener;
-//import ij.plugin.*;
 import ij.plugin.filter.*;
 import ij.plugin.frame.Recorder;
 import ij.measure.ResultsTable;
 import java.awt.image.BufferedImage;
-//import java.nio.FloatBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.Hashtable;
+import java.util.Set;
 
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
-//import javax.swing.JTextField;
 
-//import static org.bytedeco.javacpp.opencv_core.*;
-//import static org.bytedeco.javacpp.opencv_imgproc.*;
-import org.bytedeco.opencv.opencv_core.*;
+import org.bytedeco.javacpp.*;
+import org.bytedeco.javacpp.indexer.*;
+import org.bytedeco.javacv.Java2DFrameUtils;
+import org.bytedeco.opencv.opencv_core.Mat;
 import org.bytedeco.opencv.opencv_core.Point;
-//import org.bytedeco.opencv.opencv_imgproc.*;
+import org.bytedeco.opencv.opencv_core.Size;
 
 import static org.bytedeco.opencv.global.opencv_core.*;
 import static org.bytedeco.opencv.global.opencv_imgproc.*;
 
 
-import org.bytedeco.javacpp.indexer.*;
+
 
 /* This is a Maven project implementing an ImageJ plugin providing trackig of 
 a spot moving in a field with 4 reference marks. It was created for automatization 
@@ -77,8 +78,15 @@ public class Laser_Spot_Track4 implements PlugInFilter, DialogListener {
     Rectangle spot_rect, holder_rect, mark1_rect, mark2_rect, mark3_rect, mark4_rect;
     Roi spot_roi,holder_roi, mark1_roi, mark2_roi, mark3_roi, mark4_roi;
     PointRoi proi_spot,proi_att,proi_mark1,proi_mark2,proi_mark3,proi_mark4;
-    int method=5, refSlice, sArea = 50, templSize=120, anStep=0;
-    double seconds=0, timeStep=1.0, markDist=100.0;
+    static final int matchMethodDefault = 5,
+    		searchAreaDefault = 50,
+    		templSizeDefault = 120;
+    static final double markDistDefault = 100.0;
+    static final boolean videoInputDefault = false;
+    static final boolean autoSkipDefault = false;
+    
+    int method = matchMethodDefault, refSlice, sArea = searchAreaDefault, templSize = templSizeDefault, anStep=0;
+    double seconds=0, timeStep=1.0, markDist = markDistDefault;
     Instant first_shot_time; 
     int width, height, refBitDepth, refX_spot, refY_spot, refX_att=0, refY_att=0,
     		refX_mark1, refY_mark1, 
@@ -95,6 +103,16 @@ public class Laser_Spot_Track4 implements PlugInFilter, DialogListener {
     		spotX0=0.0, spotY0=0.0,
     		X_abs, Y_abs, 
     		dX=0.0, dY=0.0, dL=0.0;
+    
+    private static final Set<String> videoTypes = new HashSet<String>(java.util.Arrays.asList(
+		     new String[] {"WEBM", "MKV", "VOB", "OGV", "OGG", "DRC", "MNG", "AVI", 
+		    		 "MOV", "QT", "WMV", "YUV", "RM", "RMVB", "ASF", "AMV", "MP4", 
+		    		 "M4P", "MPG", "MP2", "MPEG", "MPE", "MPV", "M2V", 
+		    		 "M4V", "SVI", "3GP", "3G2", "MXF", "ROQ", "NSV", "FLV", "F4V", 
+		    		 "F4P", "F4A", "F4B" }
+		));
+    
+    private static final String pluginName = "Laser Spot Track";  
     
     /*
     
@@ -117,7 +135,7 @@ public class Laser_Spot_Track4 implements PlugInFilter, DialogListener {
     double spot_mideal, att_mideal, mark1_mideal, mark2_mideal, mark3_mideal, mark4_mideal;
     
     ImagePlus plotImage;
-    boolean folderMonitoring=true, updateTemplates=false, ExifTime=true, autoSkip=false;
+    boolean folderMonitoring=true, updateTemplates=false, ExifTime=true, autoSkip=autoSkipDefault, alwaysAutoSkip=autoSkipDefault;
     int autoSkipCounter=0, maxSArea=500;
     volatile WaitForUserDialog StopDlg=null, MonitorDlg=null;
     
@@ -130,11 +148,15 @@ public class Laser_Spot_Track4 implements PlugInFilter, DialogListener {
     boolean subPixel = true;
     boolean matchIntensity = false;
     boolean showRT = true;
-    boolean firstPoint = true;
+    boolean firstPoint = true, videoInput=videoInputDefault, stopPlugin=false, useTimeStamps=true, javacvInstalled = false;
 	Roi refCropRoi = null;
 	//Roi mid_refCropRoi = null;
 	double[] matchThreshold=new double[]{0.1, 0.1, 0.05, 0.05, 0.2, 0.2};
 	ImageWindow imgWindow;
+	
+	int movieFrameNum=0, previousFrameNum=0;
+    double impliedFrameRate;
+    ImagePlus prevMovieFrame;
 	
 
 
@@ -179,36 +201,299 @@ public class Laser_Spot_Track4 implements PlugInFilter, DialogListener {
 	}
 */
 	
-    public int setup(String arg, ImagePlus imp) {
+//    public int setup(String arg, ImagePlus imp) {
+//    	
+//    	int returnMask = NO_IMAGE_REQUIRED + DOES_8G + DOES_16 +  DOES_32 + DOES_RGB + STACK_REQUIRED;
+//    	
+//    	if (!CheckJavaCV("1.5", true, "opencv"))
+//    	{
+//    		return returnMask;
+//    	}
+//    	
+//    	 this.imp = imp;
+//         if (imp==null || imp.getStack()==null || imp.getStackSize()<2 || !imp.getStack().isVirtual()) {
+//         	IJ.run("Image Sequence...");
+//         	this.imp = IJ.getImage();
+//         	
+//         }
+//         
+//         return returnMask;
+//    }
+	
+	
+public int setup(String arg, ImagePlus imp) {
     	
-    	int returnMask = NO_IMAGE_REQUIRED + DOES_8G + DOES_16 +  DOES_32 + DOES_RGB + STACK_REQUIRED;
+		int returnMask = NO_IMAGE_REQUIRED + DOES_8G + DOES_16 +  DOES_32 + DOES_RGB + STACK_REQUIRED;
+    	//IJ.run("Install JavaCV libraries", "select=[Install missing] opencv openblas");
     	
-    	if (!CheckJavaCV("1.5", true, "opencv"))
+    	//if (!CheckJavaCV("opencv openblas ffmpeg"))
+		javacvInstalled = CheckJavaCV("1.5", true, "opencv");
+		if (!javacvInstalled)
     	{
-    		return returnMask;
+    		stopPlugin=true;
+            return returnMask;
     	}
     	
-    	 this.imp = imp;
-         if (imp==null || imp.getStack()==null || imp.getStackSize()<2 || !imp.getStack().isVirtual()) {
-         	IJ.run("Image Sequence...");
-         	this.imp = IJ.getImage();
-         	
-         }
-         
-         return returnMask;
+		videoInput = (boolean) Prefs.get("laserspottrack.videoInput", videoInputDefault);
+    	GenericDialog pluginMode = new GenericDialog(pluginName);
+    	pluginMode.addMessage("Choose from the image source type - video (experimental) or time lapse series");
+    	String[] sourceTypes = new String[]{"Time lapse series", "Video file"};
+    	pluginMode.addRadioButtonGroup("Source Type", sourceTypes, 2, 1, (videoInput?"Video file":"Time lapse series"));
+    	pluginMode.showDialog();
+        if (pluginMode.wasCanceled()) {
+        	stopPlugin=true;
+            return returnMask;
+        }
+        videoInput = pluginMode.getNextRadioButton().equalsIgnoreCase("Video file");
+        Prefs.set("laserspottrack.videoInput", videoInput);
+        int openImpCount = WindowManager.getWindowCount();
+        if (videoInput) {
+        	
+     	
+        	ArrayList<String> videoStacks = new ArrayList<String>(0);
+    		ArrayList<Integer> videoStackIDs = new ArrayList<Integer>(0);
+
+        	int videoCount=0;
+        	for (int srcCnt = 0; srcCnt < openImpCount; srcCnt++) {
+        		ImagePlus openImp = WindowManager.getImage(srcCnt+1);
+        		if (openImp.getStack()!=null 
+        				&& openImp.getStack().getSize()>1 
+        				&& openImp.getStack().isVirtual()
+        				&& (openImp.getProperty("stack_source_type")!=null &&
+        				     openImp.getProperty("stack_source_type").toString().equals("ffmpeg_frame_grabber"))){
+        			videoStacks.add(openImp.getTitle());
+        			videoStackIDs.add(openImp.getID());
+        			videoCount++;
+
+        		}
+        		
+        	}
+        	
+        	if (videoCount>0){
+
+            	if (videoCount==1 && WindowManager.getCurrentImage().getID()==videoStackIDs.get(0)){
+            		this.imp = WindowManager.getImage(videoStackIDs.get(0));
+    				WindowManager.setCurrentWindow(this.imp.getWindow());
+    				return returnMask;
+            	}
+        		GenericDialog gd = new GenericDialog(pluginName);
+        		gd.addMessage("Select the video stack or press Cancel to open another video");
+        		gd.addChoice("List of open video stacks", videoStacks.toArray(new String[0]), videoStacks.get(0));
+        		gd.showDialog();
+    			if (!gd.wasCanceled()) {
+    				this.imp = WindowManager.getImage(videoStackIDs.get(gd.getNextChoiceIndex()));
+    				WindowManager.setCurrentWindow(this.imp.getWindow());
+    				return returnMask;
+    			}
+        	} 
+
+
+        	
+        	String videoReadCommand = "Using FFmpeg...";
+        	Hashtable table = Menus.getCommands();
+    		String className = (String)table.get(videoReadCommand);
+    		if (className==null) {
+    			videoReadCommand = "Compressed video";
+    			className = (String)table.get(videoReadCommand);
+    			if (className==null) {
+    				videoReadCommand = "Import Movie Using FFmpeg...";
+        			className = (String)table.get(videoReadCommand);
+        			if (className==null)
+        				IJ.showMessage("FFmpeg_Video plugin is necessary to import compressed video. \nIt can be intalled from the update site http://sites.imagej.net/VideoImportExport.");
+    			}
+    		}
+    		
+    		OpenDialog	od = new OpenDialog("Open Video File", "");
+
+
+    		if (od.getFileName() != null) {
+    			//IJ.run("Using FFmpeg...", "open=["+od.getPath()+"] importquiet=true");
+    			IJ.run(videoReadCommand, "open=["+od.getPath()+"]");
+    			this.imp = WindowManager.getCurrentImage();
+    		} else {
+    			stopPlugin=true;
+    			return returnMask;
+    		}
+    		
+    		
+        	//this.imp = WindowManager.getCurrentImage();
+        	if (this.imp == null || this.imp.getProperty("stack_source_type")==null ||
+        			!this.imp.getProperty("stack_source_type").toString().equals("ffmpeg_frame_grabber")) {
+    			stopPlugin=true;
+    			return returnMask;
+    		}
+        	
+        } else {
+        	ArrayList<String> imgStacks = new ArrayList<String>(0);
+    		ArrayList<Integer> imgStackIDs = new ArrayList<Integer>(0);
+
+        	int seqCount=0;
+        	for (int srcCnt = 0; srcCnt < openImpCount; srcCnt++) {
+        		ImagePlus openImp = WindowManager.getImage(srcCnt+1);
+        		
+
+        		if (openImp.getStack()!=null 
+        				&& openImp.getStack().getSize()>1 
+        				&& openImp.getStack().isVirtual()
+        				&& (openImp.getProperty("stack_source_type")==null ||
+        				     (openImp.getProperty("stack_source_type")!=null &&
+        				     !openImp.getProperty("stack_source_type").toString().equals("ffmpeg_frame_grabber")))){
+        			imgStacks.add(openImp.getTitle());
+        			imgStackIDs.add(openImp.getID());
+        			seqCount++;
+        		}
+        		
+        	}
+        	if (seqCount>0){
+        		
+            	if (seqCount==1 && WindowManager.getCurrentImage().getID()==imgStackIDs.get(0)){
+            		this.imp = WindowManager.getImage(imgStackIDs.get(0));
+    				WindowManager.setCurrentWindow(this.imp.getWindow());
+    				return returnMask;
+            	}
+        		GenericDialog gd = new GenericDialog(pluginName);
+        		gd.addMessage("Select image sequence stack or press Cancel to open another stack");
+        		gd.addChoice("List of open virtual stacks", imgStacks.toArray(new String[0]), imgStacks.get(0));
+        		gd.showDialog();
+    			if (!gd.wasCanceled()) {
+    				this.imp = WindowManager.getImage(imgStackIDs.get(gd.getNextChoiceIndex()));
+    				WindowManager.setCurrentWindow(this.imp.getWindow());
+    				
+    				return returnMask;
+    			}
+        	} 
+        	
+        	
+        	
+        		OpenDialog	od = new OpenDialog("Select first file in the sequence", "");
+
+
+        		if (od.getFileName() != null) {
+        			
+        			String sequencePath = od.getPath();
+        			String firstFileName = od.getFileName();
+        			String extension = "";
+        			int i = firstFileName.lastIndexOf('.');
+        			if (i > 0 && i < firstFileName.length() - 1) {
+        			    extension = firstFileName.substring(i+1);
+        			    if (videoTypes.contains(extension.toUpperCase())) {
+        			    	IJ.showMessage("Error", "It seems that a video file is selected instead of image file.");
+        			    	stopPlugin=true;
+                			return returnMask;
+        			    }
+        			} else {
+            			stopPlugin=true;
+            			return returnMask;
+            		}
+        			File[] fileList = (new File(od.getDirectory())).listFiles();
+        			ArrayList<String> stackFiles = new ArrayList<String>(0);
+	            	int firstFile=0;
+
+	            	for (i = 0; i < fileList.length; i++){
+	            		if (fileList[i].isFile() && fileList[i].getName().contains(extension)){
+	            			stackFiles.add(fileList[i].getName());
+	            		}
+	            	}
+	            	if (stackFiles.size()<2){
+	            		stopPlugin=true;
+	        			return returnMask;
+	            	} else {
+	            		stackFiles.sort(null);//(String::compareToIgnoreCase);
+	            		firstFile=stackFiles.indexOf(firstFileName) + 1;
+	            	}
+	            	if (firstFile==0) {
+	        			stopPlugin=true;
+	        			return returnMask;
+	        		}
+	            	
+        			IJ.run("Image Sequence...", "open=["+sequencePath+"] starting="+firstFile+" file="+extension+" sort use");
+        			this.imp = IJ.getImage();
+        			FileInfo fi = new FileInfo();
+        			fi.fileName = firstFileName;
+        			fi.directory = od.getDirectory();
+        			
+        			this.imp.setFileInfo(fi);
+        			
+        		} else {
+        			stopPlugin=true;
+        			return returnMask;
+        		}
+        		
+
+        	
+        }
+        
+        return returnMask;
     }
 
     
 	public void run(ImageProcessor ip) {
 
+		if (stopPlugin) {
+			if (javacvInstalled) IJ.showMessage("Error", "No source chosen. Stopping.");
+			return;
+		}
 		
 		imgWindow=imp.getWindow();
 		
         stack = imp.getStack();
-        if (!stack.isVirtual()) {
-        	IJ.showMessage("Error", "only virtual stacks are supported");
+        if (stack.size()<2)  {
+        	IJ.showMessage("Error", "There is only 1 slice in the stack.\nNothing to track.");
             return;
         }
+        
+        if (!videoInput && !stack.isVirtual()) {
+        	IJ.showMessage("Error", "Only virtual stacks are supported");
+            return;
+        }
+        
+        
+        
+        if (videoInput){
+        	
+        	boolean fpsDetected=true;
+        	if (imp.getProperty("video_fps")!=null){
+        		impliedFrameRate=Double.parseDouble(imp.getProperty("video_fps").toString());//((FFmpeg_FrameReader)stack).getFrameRate();
+        	} else {
+        		impliedFrameRate=1.0;
+        		fpsDetected=false;
+        	}
+        	
+        	
+        	GenericDialog gd = new GenericDialog(pluginName);
+        	gd.addMessage("Please chose the method of getting the timestamp info\n"
+        			+ "\"Frame timestapm\" (default) is useful in case of variable frame rate;\n"
+        			+ "\"Calculate from frame rate\" works with constant frame rate video and allows to change the frame rate value.");
+        	gd.addRadioButtonGroup("Timestamp source", new String[]{"Frame timestapm", "Calculate from frame rate"}, 2, 1, "Frame timestapm");
+        	String fps_detected = String.format("%.3f", impliedFrameRate);
+        	if (fpsDetected){
+        		gd.addMessage("Frame rate of the video is determined as: "+ fps_detected + " fps.\n"
+        			+ "You may redefine the frame rate beneath.");
+        	} else {
+        		gd.addMessage("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n"+
+        	"Frame rate of the video cannot be determined. It is arbitrarily set to 1 fps\n"
+            			+ "You may redefine the frame rate beneath.\n"+
+        				  "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+        	}
+        	gd.addNumericField("Change frame rate to", impliedFrameRate, 3);
+
+        	gd.showDialog();
+        	if (gd.wasCanceled()) {
+        		IJ.showMessage("Plugin is canceled.");
+        		return;
+        	}
+
+        	useTimeStamps=gd.getNextRadioButton().equalsIgnoreCase("Frame timestapm");
+        	impliedFrameRate = gd.getNextNumber();
+        	if (!useTimeStamps && (impliedFrameRate==Double.NaN || impliedFrameRate<=0)){
+        		IJ.showMessage("Wrong frame rate specified. Stopping plugin.");
+        		return;
+        	}
+        }
+        
+        
+        
+        
         displacement_list = new ArrayList<Double>();
         X_pix_list = new ArrayList<Double>();
         Y_pix_list = new ArrayList<Double>();
@@ -440,23 +725,36 @@ public class Laser_Spot_Track4 implements PlugInFilter, DialogListener {
         	
         	rt = new ResultsTable();
             
-            rt.setDecimalPlaces(2, 2);
-			rt.setDecimalPlaces(3, 2);
-			rt.setDecimalPlaces(4, 2);
-			rt.setDecimalPlaces(5, 2);
-			rt.setDecimalPlaces(6, 2);
+//            rt.setDecimalPlaces(2, 2);
+//			rt.setDecimalPlaces(3, 2);
+//			rt.setDecimalPlaces(4, 2);
+//			rt.setDecimalPlaces(5, 2);
+//			rt.setDecimalPlaces(6, 2);
 			
 			
 			rt.show("Results");
-            rt.showRowNumbers(false);
+            //rt.showRowNumbers(false);
 
         }
         
         
-        FileInfo fi = imp.getOriginalFileInfo();
-        String directory = fi.directory;
-        String name = stack.getSliceLabel(refSlice);
-        first_shot_time = getShotTime(directory + name);
+//        FileInfo fi = imp.getOriginalFileInfo();
+//        String directory = fi.directory;
+//        String name = stack.getSliceLabel(refSlice);
+//        first_shot_time = getShotTime(directory + name);
+//    	if (first_shot_time==null) ExifTime=false;
+		
+		FileInfo fi = null;
+        String directory = "";
+        String name = "";
+        
+        if(!videoInput){
+        	fi = imp.getOriginalFileInfo();
+        	directory = fi.directory;
+        	name = stack.getSliceLabel(refSlice);
+        }
+        
+    	first_shot_time = getShotTime(directory + name, refSlice);
     	if (first_shot_time==null) ExifTime=false;
 		
 		calcDisplacement();
@@ -466,23 +764,25 @@ public class Laser_Spot_Track4 implements PlugInFilter, DialogListener {
 		if (showRT) {
             rt.incrementCounter();
             rt.addValue("Time", 0);
-            rt.addValue("File", stack.getSliceLabel(refSlice));
+            //rt.addValue("File", stack.getSliceLabel(refSlice));
+            if (videoInput) rt.addValue("File", imp.getTitle() + ":" +stack.getSliceLabel(refSlice).replaceAll(" ", ""));
+            else rt.addValue("File", stack.getSliceLabel(refSlice));
             rt.addValue("dX_pix", 0.0);
             rt.addValue("dY_pix", 0.0);
             rt.addValue("X_abs", X_abs);
             rt.addValue("Y_abs", Y_abs);
             rt.addValue("dL", dL);
-           
+            
 			
-			rt.setDecimalPlaces(2, 2);
-			rt.setDecimalPlaces(3, 2);
-			rt.setDecimalPlaces(4, 2);
-			rt.setDecimalPlaces(5, 2);
-			rt.setDecimalPlaces(6, 2);
+//			rt.setDecimalPlaces(2, 2);
+//			rt.setDecimalPlaces(3, 2);
+//			rt.setDecimalPlaces(4, 2);
+//			rt.setDecimalPlaces(5, 2);
+//			rt.setDecimalPlaces(6, 2);
 			
 			rt.show("Results");
-            rt.showRowNumbers(false);
-            
+            //rt.showRowNumbers(false);
+            //IJ.log("colnumber - " + (rt.getLastColumn() +  1));
             
             
         }
@@ -522,23 +822,29 @@ public class Laser_Spot_Track4 implements PlugInFilter, DialogListener {
         
 		
         
-        for (int i = refSlice + 1; i < stack.getSize() + 1; i++) {     //align slices after reference slice.
+        for (int i = refSlice + 1; i < stack.getSize() + 1; i++) {    
         	
         	if (!StopThread.isAlive()) {
         		new WaitForUserDialog("Laser Spot Track4", "The track is finished.").show();
         		return;
         	}
         	
-        	Opener opener = new Opener();  
-			String imageFilePath = directory+stack.getSliceLabel(i);
+        	Opener opener=null;  
+			String imageFilePath="";
 			
-			ImagePlus imp_new = opener.openImage(imageFilePath);
+			ImagePlus imp_new=null;
         	
-			if ((new File(imageFilePath)).isFile() 
+        	if (!videoInput){
+				opener = new Opener();  
+				imageFilePath = directory+stack.getSliceLabel(i);
+				imp_new = opener.openImage(imageFilePath);
+			}
+        	
+			if (videoInput || ((new File(imageFilePath)).isFile() 
 					&& imp_new!=null 
 					&& imp_new.getWidth()==width 
 					&& imp_new.getHeight()==height 
-					&& imp_new.getBitDepth()==refBitDepth){
+					&& imp_new.getBitDepth()==refBitDepth)){
 
 				
 					double  tmp_disX_spot=disX_spot,
@@ -587,7 +893,8 @@ public class Laser_Spot_Track4 implements PlugInFilter, DialogListener {
 		            	rt.incrementCounter();
 		            	
 		                rt.addValue("Time", seconds);
-		                rt.addValue("File", stack.getSliceLabel(i));
+		                if (videoInput) rt.addValue("File", imp.getTitle() + ":" +stack.getSliceLabel(refSlice).replaceAll(" ", ""));
+		                else rt.addValue("File", stack.getSliceLabel(refSlice));
 		                rt.addValue("dX_pix", dX_pix);
 		                rt.addValue("dY_pix", dY_pix);
 		                rt.addValue("X_abs", X_abs);
@@ -595,16 +902,16 @@ public class Laser_Spot_Track4 implements PlugInFilter, DialogListener {
 		                rt.addValue("dL", dL);
 		               
 		                
-						rt.setDecimalPlaces(2, 2);
-						rt.setDecimalPlaces(3, 2);
-						rt.setDecimalPlaces(4, 2);
-						rt.setDecimalPlaces(5, 2);
-						rt.setDecimalPlaces(6, 2);
+//						rt.setDecimalPlaces(2, 2);
+//						rt.setDecimalPlaces(3, 2);
+//						rt.setDecimalPlaces(4, 2);
+//						rt.setDecimalPlaces(5, 2);
+//						rt.setDecimalPlaces(6, 2);
 						
 						
 		
 		                rt.show("Results");
-		                rt.showRowNumbers(false);
+		                //rt.showRowNumbers(false);
 		                
 		                
 		                
@@ -650,7 +957,14 @@ public class Laser_Spot_Track4 implements PlugInFilter, DialogListener {
 			}
         }
         	
-        
+        if (videoInput){
+//     	   if (saveFlatten){
+//            	
+//            	//saveFlattenFrames(((FFmpeg_FrameReader)stack).getDirectory() + "flatten"+File.separatorChar, 0, true);
+//     		   saveFlattenFrames(imp.getOriginalFileInfo().directory + "flatten"+File.separatorChar, 0, true);
+//            }
+        	return;
+        }
        
         
         GenericDialog gd = new GenericDialog("Monitor for additional images");
@@ -800,15 +1114,15 @@ public class Laser_Spot_Track4 implements PlugInFilter, DialogListener {
 						            		                rt.addValue("dL", dL);
 						            		               
 						            		                
-						            						rt.setDecimalPlaces(2, 2);
-						            						rt.setDecimalPlaces(3, 2);
-						            						rt.setDecimalPlaces(4, 2);
-						            						rt.setDecimalPlaces(5, 2);
-						            						rt.setDecimalPlaces(6, 2);
+//						            						rt.setDecimalPlaces(2, 2);
+//						            						rt.setDecimalPlaces(3, 2);
+//						            						rt.setDecimalPlaces(4, 2);
+//						            						rt.setDecimalPlaces(5, 2);
+//						            						rt.setDecimalPlaces(6, 2);
 						            						
 						            		                
 						            		                rt.show("Results");
-						            		                rt.showRowNumbers(false);
+						            		                //rt.showRowNumbers(false);
 						            		                
 						            		               
 						            		                
@@ -860,15 +1174,37 @@ public class Laser_Spot_Track4 implements PlugInFilter, DialogListener {
         new WaitForUserDialog("Laser Spot Tracking", "The tracking is finished.").show();
     }
 	
-private boolean CheckJavaCV(String version, boolean treatAsMinVer, String components) {
+	private boolean CheckJavaCV(String version, boolean treatAsMinVer, String components) {
 		
 		String javaCVInstallCommand = "Install JavaCV libraries";
     	Hashtable table = Menus.getCommands();
 		String javaCVInstallClassName = (String)table.get(javaCVInstallCommand);
 		if (javaCVInstallClassName==null) {
-			IJ.showMessage("JavaCV check", "JavaCV Installer not found.\n"
-					+"Please install it from from JavaCVInstaller update site:\n"
-					+"https://sites.imagej.net/JavaCVInstaller/");
+//			IJ.showMessage("JavaCV check", "JavaCV Installer not found.\n"
+//					+"Please install it from from JavaCVInstaller update site:\n"
+//					+"https://sites.imagej.net/JavaCVInstaller/");
+			
+			int result = JOptionPane.showConfirmDialog(null,
+					"<html><h2>JavaCV Installer not found.</h2>"
+							+ "<br>Please install it from from JavaCVInstaller update site:"
+							+ "<br>https://sites.imagej.net/JavaCVInstaller/"
+							+ "<br>Do you whant it to be installed now for you?"
+							+ "<br><i>you need to restart ImageJ after the install</i></html>",
+							"JavaCV check",
+                    JOptionPane.YES_NO_OPTION,
+                    JOptionPane.QUESTION_MESSAGE);
+			if (result == JOptionPane.YES_OPTION) {
+				net.imagej.updater.CommandLine updCmd = new net.imagej.updater.CommandLine(AppUtils.getBaseDirectory("ij.dir", CommandLine.class, "updater"), 80);
+				updCmd.addOrEditUploadSite("JavaCVInstaller", "https://sites.imagej.net/JavaCVInstaller/", null, null, false);
+				net.imagej.updater.CommandLine updCmd2 = new net.imagej.updater.CommandLine(AppUtils.getBaseDirectory("ij.dir", CommandLine.class, "updater"), 80);
+				updCmd2.update(Arrays.asList("plugins/JavaCV_Installer/JavaCV_Installer.jar"));
+				IJ.run("Refresh Menus");
+				table = Menus.getCommands();
+				javaCVInstallClassName = (String)table.get(javaCVInstallCommand);
+				if (javaCVInstallClassName==null) {
+					IJ.showMessage("JavaCV check", "Failed to install JavaCV Installer plugin.\nPlease install it manually.");
+				}
+			}
 			return false;
 		}
 		
@@ -878,38 +1214,36 @@ private boolean CheckJavaCV(String version, boolean treatAsMinVer, String compon
 				+ (treatAsMinVer?"treat_selected_version_as_minimal_required ":"")
 				+ components;
 
-		//SR 2021-08-05 begin
 		boolean saveRecorder = Recorder.record;		//save state of the macro Recorder
 		Recorder.record = false;					//disable the macro Recorder to avoid the JavaCV installer plugin being recorded instead of this plugin
 		String saveMacroOptions = Macro.getOptions();
 		IJ.run("Install JavaCV libraries", installerCommand);
 		if (saveMacroOptions != null) Macro.setOptions(saveMacroOptions);
 		Recorder.record = saveRecorder;				//restore the state of the macro Recorder
-		//SR 2021-08-05 end
-
-		
+				
 		String result = Prefs.get("javacv.install_result", "");
 		String launcherResult = Prefs.get("javacv.install_result_launcher", "");
-		
 		if (!(result.equalsIgnoreCase("success") && launcherResult.equalsIgnoreCase("success"))) {
-//			IJ.log("JavaCV installation state. Prerequisites: "+launcherResult+" JavaCV: "+ result);
 			if(result.indexOf("restart")>-1 || launcherResult.indexOf("restart")>-1) {
 				IJ.log("Please restart ImageJ to proceed with installation of necessary JavaCV libraries.");
-//				IJ.showMessage("FFmpeg Viseo Import/Export", "Please restart ImageJ to proceed with installation of necessary JavaCV libraries.");
 				return false;
 			} else {
-				IJ.log("JavaCV installation failed for above reason. Trying to use JavaCV as is...");
+				IJ.log("JavaCV installation failed. Trying to use JavaCV as is...");
 				return true;
 			}
 		}
-//		IJ.log("JavaCV installation state. Prerequisites: "+launcherResult+" JavaCV: "+ result);
 		return true;
 	}
 	
-	private Instant getShotTime(String imageFilePath)
+	private Instant getShotTime(String imageFilePath, int videoSlice)
 	{
 		 // the creation time of the image is taken from the EXIF metadata
-        
+	    
+		if (videoInput){
+			long timeStampMicroSec = Math.round(Double.parseDouble(stack.getSliceLabel(videoSlice).replaceAll(" s", ""))*1000000);// ((FFmpeg_FrameReader)stack).getFrameTimeStamp(videoSlice - 1);
+			if (useTimeStamps) return Instant.ofEpochSecond(0L, timeStampMicroSec*1000L);
+			else return Instant.ofEpochSecond(0L, Math.round(1000000000.0*(videoSlice - 1)/impliedFrameRate));
+		}
 	       
 		File jpegFile = new File(imageFilePath);
 		
@@ -1848,7 +2182,7 @@ private boolean CheckJavaCV(String version, boolean treatAsMinVer, String compon
     	        if (stopTracking) return 2;
  
     	        //if (iter>0) spot_matchRes.remove(spot_matchRes.size()-1);
-    	        autoSkip=false;
+    	        autoSkip=alwaysAutoSkip;
     	        autoSkipCounter=0;
     			spot_matchRes.add(coord_res[2]);
     			
@@ -1867,11 +2201,26 @@ private boolean CheckJavaCV(String version, boolean treatAsMinVer, String compon
         
         // the creation time of the image is taken from the EXIF metadata or incremented by timeStep
         
-        if (ExifTime)
+//        if (ExifTime)
+//        {
+//             Instant shot_time = getShotTime(imp.getOriginalFileInfo().directory + stack.getSliceLabel(slice));
+//             		 
+//        	if (shot_time!=null) seconds = Duration.between(first_shot_time, shot_time).toNanos()/1000000000.0;//(double)((new Duration(first_shot_time,shot_time)).getStandardSeconds());
+//        	else 
+//        	{	
+//        		ExifTime=false;
+//        		if (seconds!=0.0) seconds+=timeStep;
+//        	}
+//        }
+//        else seconds+=timeStep;
+			
+		if (ExifTime)
         {
-             Instant shot_time = getShotTime(imp.getOriginalFileInfo().directory + stack.getSliceLabel(slice));
-             		 
-        	if (shot_time!=null) seconds = Duration.between(first_shot_time, shot_time).toNanos()/1000000000.0;//(double)((new Duration(first_shot_time,shot_time)).getStandardSeconds());
+        	Instant shot_time;
+        	if(videoInput) shot_time = getShotTime("", slice);
+        	else shot_time = getShotTime(imp.getOriginalFileInfo().directory + stack.getSliceLabel(slice), slice);
+             
+        	if (shot_time!=null) seconds = Duration.between(first_shot_time, shot_time).toNanos()/1000000000.0;//(new Duration(first_shot_time,shot_time)).getMillis()/1000.0;
         	else 
         	{	
         		ExifTime=false;
@@ -2058,20 +2407,28 @@ private boolean CheckJavaCV(String version, boolean treatAsMinVer, String compon
 	
     private boolean getUserParameters() {
 
+    	//get saved parameters
+    	method = (int) Prefs.get("laserspottrack.matchMethod", matchMethodDefault);
+    	alwaysAutoSkip = (boolean) Prefs.get("laserspottrack.autoSkip", autoSkipDefault);
+    	sArea = (int) Prefs.get("laserspottrack.searchArea", searchAreaDefault);
+    	templSize = (int) Prefs.get("laserspottrack.templateSize", templSizeDefault);
+    	markDist = (double) Prefs.get("laserspottrack.markDist", markDistDefault);
+    	
         String[] methods = {"Square difference", "Normalized square difference", "Cross correlation", "Normalized cross correlation", "Correlation coefficient", "Normalized correlation coefficient"};
         //String[] itpMethods = {"Bilinear", "Bicubic"};
 
-        GenericDialog gd = new GenericDialog("Laser Spot Track");
+        GenericDialog gd = new GenericDialog(pluginName);
         gd.addMessage("Only virtual stacks of time lapse images are supported currently.\n"
         		+ "Adjust the settings and follow the instructions to select templates to track.");
-        gd.addChoice("Matching method", methods, methods[5]);
+        gd.addChoice("Matching method", methods, methods[method]);
         gd.addNumericField("Template rectangle size (rectangle ROI size in pixels) ", templSize, 0);
         //gd.addMessage("(Template will be searched on the whole image if search area =0)");
         gd.addNumericField("Search area(pixels around ROI) ", sArea, 0);
         gd.addNumericField("Distance between marks in mm ", markDist, 0);
         gd.addMessage("(Template will be searched on the whole image if search area =0)");
-        gd.addCheckbox("Subpixel registration.", subPixel);
-        gd.addCheckbox("Match RGB images using intensity.", matchIntensity);
+        gd.addCheckbox("Subpixel registration", subPixel);
+        gd.addCheckbox("Match RGB images using intensity", matchIntensity);
+        gd.addCheckbox("Always skip frames with bad match", alwaysAutoSkip);
         //gd.addChoice("Interpolation method for subpixel translation", itpMethods, itpMethods[itpMethod]);
        
         //gd.addCheckbox("update templates?", false);
@@ -2085,10 +2442,18 @@ private boolean CheckJavaCV(String version, boolean treatAsMinVer, String compon
         markDist = gd.getNextNumber();
         subPixel = gd.getNextBoolean();
         matchIntensity  = gd.getNextBoolean();
+        alwaysAutoSkip = gd.getNextBoolean();
         //itpMethod = gd.getNextChoiceIndex();
         //updateTemplates = gd.getNextBoolean();
         showRT = true;
 
+        //save parameters
+        Prefs.set("laserspottrack.matchMethod", method);
+        Prefs.set("laserspottrack.autoSkip", alwaysAutoSkip);
+    	Prefs.set("laserspottrack.searchArea", sArea);
+    	Prefs.set("laserspottrack.templateSize", templSize);
+    	Prefs.set("laserspottrack.markDist", markDist);
+        
         return true;
     }
     /*
