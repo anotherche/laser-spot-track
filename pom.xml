@@ -302,7 +302,6 @@
 			<plugin>
 	        <groupId>org.scijava</groupId>
 	        <artifactId>scijava-maven-plugin</artifactId>
-<!-- 	        <version>0.7.0</version> -->
 	        <executions>
 	          <execution>
 	            <id>populate-app</id>
@@ -311,16 +310,13 @@
 	              <goal>populate-app</goal>
 	            </goals>
 	            <configuration>
-<!-- 	              <scijava.app.subdirectory>plugins/PhotoBend</scijava.app.subdirectory>-->
 	              <ignoreDependencies>false</ignoreDependencies>
 	              <deleteOtherVersionsPolicy>older</deleteOtherVersionsPolicy>
-<!-- 	              	          <deleteOtherVersions>false</deleteOtherVersions> -->
 	            </configuration>
 	          </execution>
 	        </executions>
 	        <configuration>
 	          <deleteOtherVersionsPolicy>older</deleteOtherVersionsPolicy>
-<!-- 	              	          <deleteOtherVersions>false</deleteOtherVersions> -->
 	        </configuration>
 	      	</plugin>
 		
