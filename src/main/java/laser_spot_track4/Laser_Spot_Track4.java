@@ -101,7 +101,7 @@ public class Laser_Spot_Track4 implements PlugInFilter, DialogListener {
     		disX_mark4=0.0, disY_mark4=0.0,
     		dX_pix=0.0, dY_pix=0.0,
     		spotX0=0.0, spotY0=0.0,
-    		X_abs, Y_abs, 
+    		x_abs, y_abs, 
     		dX=0.0, dY=0.0, dL=0.0;
     
     private static final Set<String> videoTypes = new HashSet<String>(java.util.Arrays.asList(
@@ -128,16 +128,16 @@ public class Laser_Spot_Track4 implements PlugInFilter, DialogListener {
 */
     
     
-    ArrayList<Double> displacement_list, X_pix_list, Y_pix_list, 
+    ArrayList<Double> displacement_list, x_pix_list, y_pix_list, 
     				  time_list, spot_matchRes, attEnd_matchRes, 
     				  mark1_matchRes, mark2_matchRes, mark3_matchRes, mark4_matchRes ; 
     double displacement_min=0.0, displacement_max=0.0;
     double spot_mideal, att_mideal, mark1_mideal, mark2_mideal, mark3_mideal, mark4_mideal;
     
     ImagePlus plotImage;
-    boolean folderMonitoring=true, updateTemplates=false, ExifTime=true, autoSkip=autoSkipDefault, alwaysAutoSkip=autoSkipDefault;
+    boolean folderMonitoring=true, updateTemplates=false, exifTime=true, autoSkip=autoSkipDefault, alwaysAutoSkip=autoSkipDefault;
     int autoSkipCounter=0, maxSArea=500;
-    volatile WaitForUserDialog StopDlg=null, MonitorDlg=null;
+    volatile WaitForUserDialog stopDlg=null, monitorDlg=null;
     
     
     
@@ -227,7 +227,7 @@ public int setup(String arg, ImagePlus imp) {
     	//IJ.run("Install JavaCV libraries", "select=[Install missing] opencv openblas");
     	
     	//if (!CheckJavaCV("opencv openblas ffmpeg"))
-		javacvInstalled = CheckJavaCV("1.5", true, "opencv");
+		javacvInstalled = checkJavaCV("1.5", true, "opencv");
 		if (!javacvInstalled)
     	{
     		stopPlugin=true;
@@ -495,8 +495,8 @@ public int setup(String arg, ImagePlus imp) {
         
         
         displacement_list = new ArrayList<Double>();
-        X_pix_list = new ArrayList<Double>();
-        Y_pix_list = new ArrayList<Double>();
+        x_pix_list = new ArrayList<Double>();
+        y_pix_list = new ArrayList<Double>();
         
         time_list = new ArrayList<Double>();
         
@@ -755,7 +755,7 @@ public int setup(String arg, ImagePlus imp) {
         }
         
     	first_shot_time = getShotTime(directory + name, refSlice);
-    	if (first_shot_time==null) ExifTime=false;
+    	if (first_shot_time==null) exifTime=false;
 		
 		calcDisplacement();
 		
@@ -769,8 +769,8 @@ public int setup(String arg, ImagePlus imp) {
             else rt.addValue("File", stack.getSliceLabel(refSlice));
             rt.addValue("dX_pix", 0.0);
             rt.addValue("dY_pix", 0.0);
-            rt.addValue("X_abs", X_abs);
-            rt.addValue("Y_abs", Y_abs);
+            rt.addValue("X_abs", x_abs);
+            rt.addValue("Y_abs", y_abs);
             rt.addValue("dL", dL);
             
 			
@@ -791,8 +791,8 @@ public int setup(String arg, ImagePlus imp) {
 		ref_Image.deleteRoi();
 		
 		displacement_list.add(dL);
-		X_pix_list.add(refX_spot+disX_spot-disX_mark1);
-		Y_pix_list.add(refY_spot+disY_spot-disY_mark1);
+		x_pix_list.add(refX_spot+disX_spot-disX_mark1);
+		y_pix_list.add(refY_spot+disY_spot-disY_mark1);
        
         time_list.add(0.0);
         
@@ -813,7 +813,7 @@ public int setup(String arg, ImagePlus imp) {
 			{
         		WaitForUserDialog dlg = new WaitForUserDialog("Tracking in progress...", "Close this message to stop the track");
         		dlg.setName("StopThread");
-        		StopDlg=dlg;
+        		stopDlg=dlg;
         		dlg.show();
 				
 			}
@@ -875,8 +875,8 @@ public int setup(String arg, ImagePlus imp) {
 					}
 					if (matchresult==2) {
 						
-						if (StopDlg!=null) {
-				        	StopDlg.close();
+						if (stopDlg!=null) {
+				        	stopDlg.close();
 				        	try {
 								StopThread.join();
 							} catch (InterruptedException e) {
@@ -897,8 +897,8 @@ public int setup(String arg, ImagePlus imp) {
 		                else rt.addValue("File", stack.getSliceLabel(refSlice));
 		                rt.addValue("dX_pix", dX_pix);
 		                rt.addValue("dY_pix", dY_pix);
-		                rt.addValue("X_abs", X_abs);
-		                rt.addValue("Y_abs", Y_abs);
+		                rt.addValue("X_abs", x_abs);
+		                rt.addValue("Y_abs", y_abs);
 		                rt.addValue("dL", dL);
 		               
 		                
@@ -947,8 +947,8 @@ public int setup(String arg, ImagePlus imp) {
        
         
         
-        if (StopDlg!=null) {
-        	StopDlg.close();
+        if (stopDlg!=null) {
+        	stopDlg.close();
         	try {
 				StopThread.join();
 			} catch (InterruptedException e) {
@@ -982,7 +982,7 @@ public int setup(String arg, ImagePlus imp) {
 				
 				
         		dlg.setName("MonitorThread");
-        		MonitorDlg=dlg;
+        		monitorDlg=dlg;
         		dlg.show();
 				
 			}
@@ -1089,8 +1089,8 @@ public int setup(String arg, ImagePlus imp) {
 					            						continue;
 					            						}
 					            						if (matchresult==2) {
-					            							if (MonitorDlg!=null) {
-					            					        	MonitorDlg.close();
+					            							if (monitorDlg!=null) {
+					            					        	monitorDlg.close();
 					            					        	try {
 					            									monitorThread.join();
 					            								} catch (InterruptedException e) {
@@ -1109,8 +1109,8 @@ public int setup(String arg, ImagePlus imp) {
 						            		            	rt.addValue("File", stack.getSliceLabel(vstack.getSize()));
 						            		            	rt.addValue("dX_pix", dX_pix);
 						            		                rt.addValue("dY_pix", dY_pix);
-						            		                rt.addValue("X_abs", X_abs);
-						            		                rt.addValue("Y_abs", Y_abs);
+						            		                rt.addValue("X_abs", x_abs);
+						            		                rt.addValue("Y_abs", y_abs);
 						            		                rt.addValue("dL", dL);
 						            		               
 						            		                
@@ -1174,7 +1174,7 @@ public int setup(String arg, ImagePlus imp) {
         new WaitForUserDialog("Laser Spot Tracking", "The tracking is finished.").show();
     }
 	
-	private boolean CheckJavaCV(String version, boolean treatAsMinVer, String components) {
+	private boolean checkJavaCV(String version, boolean treatAsMinVer, String components) {
 		
 		String javaCVInstallCommand = "Install JavaCV libraries";
     	Hashtable table = Menus.getCommands();
@@ -2195,8 +2195,8 @@ public int setup(String arg, ImagePlus imp) {
             
 			calcDisplacement();
 			anStep++;
-			X_pix_list.add(refX_spot+disX_spot-disX_mark1);
-			Y_pix_list.add(refY_spot+disY_spot-disY_mark1);
+			x_pix_list.add(refX_spot+disX_spot-disX_mark1);
+			y_pix_list.add(refY_spot+disY_spot-disY_mark1);
 		
         
         // the creation time of the image is taken from the EXIF metadata or incremented by timeStep
@@ -2214,7 +2214,7 @@ public int setup(String arg, ImagePlus imp) {
 //        }
 //        else seconds+=timeStep;
 			
-		if (ExifTime)
+		if (exifTime)
         {
         	Instant shot_time;
         	if(videoInput) shot_time = getShotTime("", slice);
@@ -2223,7 +2223,7 @@ public int setup(String arg, ImagePlus imp) {
         	if (shot_time!=null) seconds = Duration.between(first_shot_time, shot_time).toNanos()/1000000000.0;//(new Duration(first_shot_time,shot_time)).getMillis()/1000.0;
         	else 
         	{	
-        		ExifTime=false;
+        		exifTime=false;
         		if (seconds!=0.0) seconds+=timeStep;
         	}
         }
@@ -2306,8 +2306,8 @@ public int setup(String arg, ImagePlus imp) {
         for (int displStep=0;displStep<anStep+1;displStep++)
         {
         	
-        	xpf[displStep]=X_pix_list.get(displStep).floatValue()+(float)disX_mark1;
-        	ypf[displStep]=Y_pix_list.get(displStep).floatValue()+(float)disY_mark1;
+        	xpf[displStep]=x_pix_list.get(displStep).floatValue()+(float)disX_mark1;
+        	ypf[displStep]=y_pix_list.get(displStep).floatValue()+(float)disY_mark1;
         	
         	
         }
@@ -2374,13 +2374,13 @@ public int setup(String arg, ImagePlus imp) {
         //double X_abs_new, Y_abs_new;
         
         if (AX==0.0) {
-        	X_abs=CX/BX*markDist;
-        	Y_abs=CY/BY*markDist;
+        	x_abs=CX/BX*markDist;
+        	y_abs=CY/BY*markDist;
         } else {
         	double DX=Math.sqrt(BX*BX+4.0*AX*CX),
         			DY=Math.sqrt(BY*BY+4.0*AY*CY);
-        	X_abs=(DX-BX)/AX/2.0*markDist;
-        	Y_abs=(-DY-BY)/AY/2.0*markDist;
+        	x_abs=(DX-BX)/AX/2.0*markDist;
+        	y_abs=(-DY-BY)/AY/2.0*markDist;
         }
         
         
@@ -2388,13 +2388,13 @@ public int setup(String arg, ImagePlus imp) {
         //Y_abs=(rx*b_invX+ry*b_invY)*(1.0-(cx*b_invX+cy*b_invY)*(rx*a_invX+ry*a_invY))*markDist;
         
         if (firstPoint) {
-        	spotX0=X_abs;
-        	spotY0=Y_abs;
+        	spotX0=x_abs;
+        	spotY0=y_abs;
         	firstPoint=false;
         }
         
-        dX=X_abs-spotX0;
-        dY=Y_abs-spotY0;
+        dX=x_abs-spotX0;
+        dY=y_abs-spotY0;
         
         
         dL=Math.sqrt(dX*dX+dY*dY);
