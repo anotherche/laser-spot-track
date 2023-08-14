@@ -29,7 +29,7 @@
 		<license>
 			<name>GNU General Public License</name>
 			<url>http://www.gnu.org/licenses/gpl.txt</url>
-			<distribution>repo</distribution>
+			<distribution>manual</distribution>
 		</license>
 	</licenses>
 
@@ -310,7 +310,7 @@
 	              <goal>populate-app</goal>
 	            </goals>
 	            <configuration>
-	              <ignoreDependencies>false</ignoreDependencies>
+	              <ignoreDependencies>true</ignoreDependencies>
 	              <deleteOtherVersionsPolicy>older</deleteOtherVersionsPolicy>
 	            </configuration>
 	          </execution>
@@ -319,25 +319,6 @@
 	          <deleteOtherVersionsPolicy>older</deleteOtherVersionsPolicy>
 	        </configuration>
 	      	</plugin>
-		
-			<plugin>
-				<artifactId>maven-jar-plugin</artifactId>
-				<configuration>
-					<archive>
-						<manifest>
-							<mainClass>${main-class}</mainClass>
-							<addDefaultImplementationEntries>true</addDefaultImplementationEntries>
-						</manifest>
-						<manifestEntries>
-        					<Implementation-Build>${buildNumber}</Implementation-Build>
-      					</manifestEntries>
-					</archive>
-				</configuration>
-			</plugin>
-			<plugin>
-				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-release-plugin</artifactId>
-				</plugin>
 			<plugin>
 		        <groupId>org.codehaus.mojo</groupId>
 		        <artifactId>buildnumber-maven-plugin</artifactId>
@@ -351,7 +332,7 @@
 		          </execution>
 		        </executions>
 		        <configuration>
-		          <!-- <doCheck>true</doCheck> -->
+		           <doCheck>true</doCheck> 
 		          	<doUpdate>true</doUpdate>
 		          	<format>{0,date,yyyy-MM-dd HH:mm:ss}</format>
       				<items>
