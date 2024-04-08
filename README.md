@@ -13,6 +13,10 @@ of picture instability and view perspective.
 
 See details at http://imagej.net/PhotoBend
 
+
+The resulting plugin "Laser Spot Track" can be installed through normal update 
+procedure in Fiji by adding the update site https://sites.imagej.net/PhotoBend/
+
 The project uses ideas and code of 
 1. Template Matching by Qingzong Tseng (based on opencv)
 2. javacv (java interface to OpenCV) by Samuel Audet 
