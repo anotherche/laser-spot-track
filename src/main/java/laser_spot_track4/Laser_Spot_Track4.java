@@ -84,6 +84,8 @@ public class Laser_Spot_Track4 implements PlugInFilter, DialogListener {
     static final double markDistDefault = 100.0;
     static final boolean videoInputDefault = false;
     static final boolean autoSkipDefault = false;
+    static final boolean matchIntensityDefault = true;
+    static final boolean subPixelDefault = true;
     
     int method = matchMethodDefault, refSlice, sArea = searchAreaDefault, templSize = templSizeDefault, anStep=0;
     double seconds=0, timeStep=1.0, markDist = markDistDefault;
@@ -2413,6 +2415,8 @@ public int setup(String arg, ImagePlus imp) {
     	sArea = (int) Prefs.get("laserspottrack.searchArea", searchAreaDefault);
     	templSize = (int) Prefs.get("laserspottrack.templateSize", templSizeDefault);
     	markDist = (double) Prefs.get("laserspottrack.markDist", markDistDefault);
+    	matchIntensity = (boolean) Prefs.get("laserspottrack.matchIntensity", matchIntensityDefault);
+    	subPixel = (boolean) Prefs.get("laserspottrack.subPixel", subPixelDefault);
     	
         String[] methods = {"Square difference", "Normalized square difference", "Cross correlation", "Normalized cross correlation", "Correlation coefficient", "Normalized correlation coefficient"};
         //String[] itpMethods = {"Bilinear", "Bicubic"};
@@ -2453,6 +2457,9 @@ public int setup(String arg, ImagePlus imp) {
     	Prefs.set("laserspottrack.searchArea", sArea);
     	Prefs.set("laserspottrack.templateSize", templSize);
     	Prefs.set("laserspottrack.markDist", markDist);
+    	Prefs.set("laserspottrack.matchIntensity", matchIntensity);
+    	Prefs.set("laserspottrack.subPixel", subPixel);
+    	
         
         return true;
     }
