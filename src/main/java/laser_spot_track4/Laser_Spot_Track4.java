@@ -1501,11 +1501,11 @@ public int setup(String arg, ImagePlus imp) {
         	ic.convertToGray32();
         	ImageConverter mark1_ic = new ImageConverter(mark1_tar);
         	mark1_ic.convertToGray32();
-        	ImageConverter mark2_ic = new ImageConverter(mark1_tar);
+        	ImageConverter mark2_ic = new ImageConverter(mark2_tar);
         	mark2_ic.convertToGray32();
-        	ImageConverter mark3_ic = new ImageConverter(mark1_tar);
+        	ImageConverter mark3_ic = new ImageConverter(mark3_tar);
         	mark3_ic.convertToGray32();
-        	ImageConverter mark4_ic = new ImageConverter(mark1_tar);
+        	ImageConverter mark4_ic = new ImageConverter(mark4_tar);
         	mark4_ic.convertToGray32();
         	
         }
