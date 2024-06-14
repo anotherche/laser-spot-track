@@ -726,6 +726,7 @@ public int setup(String arg, ImagePlus imp) {
         	
         	
         	rt = new ResultsTable();
+        	rt.showRowNumbers(false);
             
 //            rt.setDecimalPlaces(2, 2);
 //			rt.setDecimalPlaces(3, 2);
@@ -766,6 +767,7 @@ public int setup(String arg, ImagePlus imp) {
 		if (showRT) {
             rt.incrementCounter();
             rt.addValue("Time", 0);
+            rt.addValue("Frame", "" + rt.getCounter());
             //rt.addValue("File", stack.getSliceLabel(refSlice));
             if (videoInput) rt.addValue("File", imp.getTitle() + ":" +stack.getSliceLabel(refSlice).replaceAll(" ", ""));
             else rt.addValue("File", stack.getSliceLabel(refSlice));
@@ -895,6 +897,7 @@ public int setup(String arg, ImagePlus imp) {
 		            	rt.incrementCounter();
 		            	
 		                rt.addValue("Time", seconds);
+		                rt.addValue("Frame", "" + rt.getCounter());
 		                if (videoInput) rt.addValue("File", imp.getTitle() + ":" +stack.getSliceLabel(refSlice).replaceAll(" ", ""));
 		                else rt.addValue("File", stack.getSliceLabel(refSlice));
 		                rt.addValue("dX_pix", dX_pix);
@@ -1108,6 +1111,7 @@ public int setup(String arg, ImagePlus imp) {
 						            		            if (showRT) {
 						            		            	rt.incrementCounter();
 						            		            	rt.addValue("Time", seconds);
+						            		            	rt.addValue("Frame", "" + rt.getCounter());
 						            		            	rt.addValue("File", stack.getSliceLabel(vstack.getSize()));
 						            		            	rt.addValue("dX_pix", dX_pix);
 						            		                rt.addValue("dY_pix", dY_pix);
@@ -2400,7 +2404,7 @@ public int setup(String arg, ImagePlus imp) {
         
         
         dL=Math.sqrt(dX*dX+dY*dY);
-        if (dX<0) dL=-dL;
+        //if (dX<0) dL=-dL;
         
     }
 
