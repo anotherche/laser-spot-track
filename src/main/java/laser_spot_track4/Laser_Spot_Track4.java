@@ -9,6 +9,8 @@ import ij.process.*;
 import ij.gui.*;
 import ij.io.*;
 import java.io.*;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.Duration;
 import java.time.Instant;
 
@@ -30,6 +32,8 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Hashtable;
 import java.util.Set;
+import java.util.jar.Attributes.Name;
+import java.util.regex.Pattern;
 
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
@@ -115,6 +119,7 @@ public class Laser_Spot_Track4 implements PlugInFilter, DialogListener {
 		));
     
     private static final String pluginName = "Laser Spot Track";  
+    private static final String INVALID_CHARACTERS = "[<>:\"/\\|?*]";
     
     /*
     
@@ -143,9 +148,9 @@ public class Laser_Spot_Track4 implements PlugInFilter, DialogListener {
     
     
     
-    FloatProcessor result;
-    ResultsTable rt, rt_mres;
-    String arg;
+    //FloatProcessor result;
+    ResultsTable rt;
+    String projectName;
     int windowSizeX, windowSizeY, iniX, iniY;
     boolean subPixel = true;
     boolean matchIntensity = false;
@@ -525,208 +530,211 @@ public int setup(String arg, ImagePlus imp) {
 		
 		
 
-            if (!getUserParameters()) { return;
-            }
-            
-            Overlay ov;
-    		ImageProcessor ip_tmp;
-            
-            ov = new Overlay();
-            imp.setOverlay(ov);
-            
-            refSlice = imp.getCurrentSlice();
-            ref_Image = new ImagePlus(stack.getSliceLabel(refSlice), stack.getProcessor(refSlice));
-            
-            
-			IJ.setTool("point");
-            new WaitForUserDialog("Laser_Spot_Track4", "Select a point in the center of the spot...\nthen press OK.").show();
-            
-            proi_spot = (PointRoi)imp.getRoi();
-            if (proi_spot!=null) {
-            refX_spot=proi_spot.getPolygon().xpoints[0];
-            refY_spot=proi_spot.getPolygon().ypoints[0];
-            } else {
-            	IJ.showMessage("Error", "point ROI needed");
-                return;
-            }
-            
-            int d1 = refX_spot, d2 = width - refX_spot, d3 = refY_spot, d4 = height - refY_spot;
-            int dmin = Math.min(Math.min(d1, d2), Math.min(d3, d4));
-            if (dmin<=templSize/2+sArea+1)
-            {
-            	IJ.showMessage("Error", "Search point is to close to the edge.\nReduce template rectangle size on the first dialog.");
-                return;
-            }
-            
-            int rect_half_size=templSize/2;
-                                 
-			proi_spot.setPointType(3);
-            ov.addElement(proi_spot);
-            imp.setOverlay(ov);
-            
-            spot_roi=new Roi(refX_spot-rect_half_size,refY_spot-rect_half_size,2*rect_half_size,2*rect_half_size);
-            ref_Image.setRoi(spot_roi);
-            
-            spot_rect = spot_roi.getBounds();
-            
-			spot_ref = ref_Image.crop();
-			
-            if (matchIntensity) {
-            	ImageConverter ic = new ImageConverter(spot_ref);
-            	ic.convertToGray32();
-            }
-            
-            ip_tmp=spot_ref.getProcessor();
-            gaussianBlur = new GaussianBlur();
-            gaussianBlur.blurGaussian(ip_tmp, 2, 2, 0.02);
-            refCropRoi =  spot_roi; //new Roi((int)(spot_ref.getWidth()*0.15), (int)(spot_ref.getHeight()*0.15), (int)(spot_ref.getWidth()*0.7), (int)(spot_ref.getHeight()*0.7));
+        if (!getUserParameters()) return;
+        
+        
+        Overlay ov;
+		ImageProcessor ip_tmp;
+        
+        ov = new Overlay();
+        imp.setOverlay(ov);
+        
+        refSlice = imp.getCurrentSlice();
+        ref_Image = new ImagePlus(stack.getSliceLabel(refSlice), stack.getProcessor(refSlice));
+        
+        
+        
+		IJ.setTool("point");
+        new WaitForUserDialog("Laser_Spot_Track4", "Select a point in the center of the spot...\nthen press OK.").show();
+        
+        proi_spot = (PointRoi)imp.getRoi();
+        if (proi_spot!=null) {
+        refX_spot=proi_spot.getPolygon().xpoints[0];
+        refY_spot=proi_spot.getPolygon().ypoints[0];
+        } else {
+        	IJ.showMessage("Error", "point ROI needed");
+            return;
+        }
+        
+        int d1 = refX_spot, d2 = width - refX_spot, d3 = refY_spot, d4 = height - refY_spot;
+        int dmin = Math.min(Math.min(d1, d2), Math.min(d3, d4));
+        if (dmin<=templSize/2+sArea+1)
+        {
+        	IJ.showMessage("Error", "Search point is to close to the edge.\nReduce template rectangle size on the first dialog.");
+            return;
+        }
+        
+        int rect_half_size=templSize/2;
+                             
+		proi_spot.setPointType(3);
+        ov.addElement(proi_spot);
+        imp.setOverlay(ov);
+        
+        spot_roi=new Roi(refX_spot-rect_half_size,refY_spot-rect_half_size,2*rect_half_size,2*rect_half_size);
+        ref_Image.setRoi(spot_roi);
+        
+        spot_rect = spot_roi.getBounds();
+        
+		spot_ref = ref_Image.crop();
 		
-            
-            
-          
-            
-            
-			imp.killRoi();
-			
-			
-			IJ.setTool("point");
-            new WaitForUserDialog("Laser_Spot_Track4", "Select a point in the center of the Mark1...\nthen press OK.").show();
-            
-            proi_mark1 = (PointRoi)imp.getRoi();
-            if (proi_mark1!=null) {
-            refX_mark1=proi_mark1.getPolygon().xpoints[0];
-            refY_mark1=proi_mark1.getPolygon().ypoints[0];
-            } else {
-            	IJ.showMessage("Error", "point ROI needed");
-                return;
-            }
-            
-            proi_mark1.setPointType(3);
-            ov.addElement(proi_mark1);
-            imp.setOverlay(ov);
-            
-            mark1_roi=new Roi(refX_mark1-rect_half_size,refY_mark1-rect_half_size,2*rect_half_size,2*rect_half_size);
-            ref_Image.setRoi(mark1_roi);
-            
-            mark1_rect = mark1_roi.getBounds();
-            
-			mark1_ref = ref_Image.crop();
-            if (matchIntensity) {
-            	ImageConverter ic = new ImageConverter(mark1_ref);
-            	ic.convertToGray32();
-            }
-            
-            ip_tmp=mark1_ref.getProcessor();
-            gaussianBlur.blurGaussian(ip_tmp, 2, 2, 0.02);
-            mark1_mideal= doMatch_test(mark1_ref.getProcessor(),(method==0?2:method));
-            
-            imp.killRoi();
-			
-			
-			IJ.setTool("point");
-            new WaitForUserDialog("Laser_Spot_Track4", "Select a point in the center of the Mark2...\nthen press OK.").show();
-            
-            proi_mark2 = (PointRoi)imp.getRoi();
-            if (proi_mark2!=null) {
-            refX_mark2=proi_mark2.getPolygon().xpoints[0];
-            refY_mark2=proi_mark2.getPolygon().ypoints[0];
-            } else {
-            	IJ.showMessage("Error", "point ROI needed");
-                return;
-            }
-            
-            proi_mark2.setPointType(3);
-            ov.addElement(proi_mark2);
-            imp.setOverlay(ov);
-            
-            mark2_roi=new Roi(refX_mark2-rect_half_size,refY_mark2-rect_half_size,2*rect_half_size,2*rect_half_size);
-            ref_Image.setRoi(mark2_roi);
-            
-            mark2_rect = mark2_roi.getBounds();
-            
-			mark2_ref = ref_Image.crop();
-            if (matchIntensity) {
-            	ImageConverter ic = new ImageConverter(mark2_ref);
-            	ic.convertToGray32();
-            }
-            
-            ip_tmp=mark2_ref.getProcessor();
-            gaussianBlur.blurGaussian(ip_tmp, 2, 2, 0.02);
-            mark2_mideal= doMatch_test(mark2_ref.getProcessor(),(method==0?2:method));
-            imp.killRoi();
-			
-			
-			IJ.setTool("point");
-            new WaitForUserDialog("Laser_Spot_Track4", "Select a point in the center of the Mark3...\nthen press OK.").show();
-            
-            proi_mark3 = (PointRoi)imp.getRoi();
-            if (proi_mark3!=null) {
-            refX_mark3=proi_mark3.getPolygon().xpoints[0];
-            refY_mark3=proi_mark3.getPolygon().ypoints[0];
-            } else {
-            	IJ.showMessage("Error", "point ROI needed");
-                return;
-            }
-            
-            proi_mark3.setPointType(3);
-            ov.addElement(proi_mark3);
-            imp.setOverlay(ov);
-            
-            mark3_roi=new Roi(refX_mark3-rect_half_size,refY_mark3-rect_half_size,2*rect_half_size,2*rect_half_size);
-            ref_Image.setRoi(mark3_roi);
-            
-            mark3_rect = mark3_roi.getBounds();
-            
-			mark3_ref = ref_Image.crop();
-            if (matchIntensity) {
-            	ImageConverter ic = new ImageConverter(mark3_ref);
-            	ic.convertToGray32();
-            }
-            
-            ip_tmp=mark3_ref.getProcessor();
-            gaussianBlur.blurGaussian(ip_tmp, 2, 2, 0.02);
-            mark3_mideal= doMatch_test(mark3_ref.getProcessor(),(method==0?2:method));
-            imp.killRoi();
-			
-			
-			IJ.setTool("point");
-            new WaitForUserDialog("Laser_Spot_Track4", "Select a point in the center of the Mark4...\nthen press OK.").show();
-            
-            proi_mark4 = (PointRoi)imp.getRoi();
-            if (proi_mark4!=null) {
-            refX_mark4=proi_mark4.getPolygon().xpoints[0];
-            refY_mark4=proi_mark4.getPolygon().ypoints[0];
-            } else {
-            	IJ.showMessage("Error", "point ROI needed");
-                return;
-            }
-            
-            proi_mark4.setPointType(3);
-            ov.addElement(proi_mark4);
-            imp.setOverlay(ov);
-            
-            mark4_roi=new Roi(refX_mark4-rect_half_size,refY_mark4-rect_half_size,2*rect_half_size,2*rect_half_size);
-            ref_Image.setRoi(mark4_roi);
-            
-            mark4_rect = mark4_roi.getBounds();
-            
-			mark4_ref = ref_Image.crop();
-            if (matchIntensity) {
-            	ImageConverter ic = new ImageConverter(mark4_ref);
-            	ic.convertToGray32();
-            }
-            
-            ip_tmp=mark4_ref.getProcessor();
-            gaussianBlur.blurGaussian(ip_tmp, 2, 2, 0.02);
-            mark4_mideal= doMatch_test(mark4_ref.getProcessor(),(method==0?2:method));
-			
-            
+        if (matchIntensity) {
+        	ImageConverter ic = new ImageConverter(spot_ref);
+        	ic.convertToGray32();
+        }
+        
+        ip_tmp=spot_ref.getProcessor();
+        gaussianBlur = new GaussianBlur();
+        gaussianBlur.blurGaussian(ip_tmp, 2, 2, 0.02);
+        refCropRoi =  spot_roi; //new Roi((int)(spot_ref.getWidth()*0.15), (int)(spot_ref.getHeight()*0.15), (int)(spot_ref.getWidth()*0.7), (int)(spot_ref.getHeight()*0.7));
+	
+        
+        
+      
+        
+        
+		imp.killRoi();
+		
+		
+		IJ.setTool("point");
+        new WaitForUserDialog("Laser_Spot_Track4", "Select a point in the center of the Mark1...\nthen press OK.").show();
+        
+        proi_mark1 = (PointRoi)imp.getRoi();
+        if (proi_mark1!=null) {
+        refX_mark1=proi_mark1.getPolygon().xpoints[0];
+        refY_mark1=proi_mark1.getPolygon().ypoints[0];
+        } else {
+        	IJ.showMessage("Error", "point ROI needed");
+            return;
+        }
+        
+        proi_mark1.setPointType(3);
+        ov.addElement(proi_mark1);
+        imp.setOverlay(ov);
+        
+        mark1_roi=new Roi(refX_mark1-rect_half_size,refY_mark1-rect_half_size,2*rect_half_size,2*rect_half_size);
+        ref_Image.setRoi(mark1_roi);
+        
+        mark1_rect = mark1_roi.getBounds();
+        
+		mark1_ref = ref_Image.crop();
+        if (matchIntensity) {
+        	ImageConverter ic = new ImageConverter(mark1_ref);
+        	ic.convertToGray32();
+        }
+        
+        ip_tmp=mark1_ref.getProcessor();
+        gaussianBlur.blurGaussian(ip_tmp, 2, 2, 0.02);
+        mark1_mideal= doMatch_test(mark1_ref.getProcessor(),(method==0?2:method));
+        
+        imp.killRoi();
+		
+		
+		IJ.setTool("point");
+        new WaitForUserDialog("Laser_Spot_Track4", "Select a point in the center of the Mark2...\nthen press OK.").show();
+        
+        proi_mark2 = (PointRoi)imp.getRoi();
+        if (proi_mark2!=null) {
+        refX_mark2=proi_mark2.getPolygon().xpoints[0];
+        refY_mark2=proi_mark2.getPolygon().ypoints[0];
+        } else {
+        	IJ.showMessage("Error", "point ROI needed");
+            return;
+        }
+        
+        proi_mark2.setPointType(3);
+        ov.addElement(proi_mark2);
+        imp.setOverlay(ov);
+        
+        mark2_roi=new Roi(refX_mark2-rect_half_size,refY_mark2-rect_half_size,2*rect_half_size,2*rect_half_size);
+        ref_Image.setRoi(mark2_roi);
+        
+        mark2_rect = mark2_roi.getBounds();
+        
+		mark2_ref = ref_Image.crop();
+        if (matchIntensity) {
+        	ImageConverter ic = new ImageConverter(mark2_ref);
+        	ic.convertToGray32();
+        }
+        
+        ip_tmp=mark2_ref.getProcessor();
+        gaussianBlur.blurGaussian(ip_tmp, 2, 2, 0.02);
+        mark2_mideal= doMatch_test(mark2_ref.getProcessor(),(method==0?2:method));
+        imp.killRoi();
+		
+		
+		IJ.setTool("point");
+        new WaitForUserDialog("Laser_Spot_Track4", "Select a point in the center of the Mark3...\nthen press OK.").show();
+        
+        proi_mark3 = (PointRoi)imp.getRoi();
+        if (proi_mark3!=null) {
+        refX_mark3=proi_mark3.getPolygon().xpoints[0];
+        refY_mark3=proi_mark3.getPolygon().ypoints[0];
+        } else {
+        	IJ.showMessage("Error", "point ROI needed");
+            return;
+        }
+        
+        proi_mark3.setPointType(3);
+        ov.addElement(proi_mark3);
+        imp.setOverlay(ov);
+        
+        mark3_roi=new Roi(refX_mark3-rect_half_size,refY_mark3-rect_half_size,2*rect_half_size,2*rect_half_size);
+        ref_Image.setRoi(mark3_roi);
+        
+        mark3_rect = mark3_roi.getBounds();
+        
+		mark3_ref = ref_Image.crop();
+        if (matchIntensity) {
+        	ImageConverter ic = new ImageConverter(mark3_ref);
+        	ic.convertToGray32();
+        }
+        
+        ip_tmp=mark3_ref.getProcessor();
+        gaussianBlur.blurGaussian(ip_tmp, 2, 2, 0.02);
+        mark3_mideal= doMatch_test(mark3_ref.getProcessor(),(method==0?2:method));
+        imp.killRoi();
+		
+		
+		IJ.setTool("point");
+        new WaitForUserDialog("Laser_Spot_Track4", "Select a point in the center of the Mark4...\nthen press OK.").show();
+        
+        proi_mark4 = (PointRoi)imp.getRoi();
+        if (proi_mark4!=null) {
+        refX_mark4=proi_mark4.getPolygon().xpoints[0];
+        refY_mark4=proi_mark4.getPolygon().ypoints[0];
+        } else {
+        	IJ.showMessage("Error", "point ROI needed");
+            return;
+        }
+        
+        proi_mark4.setPointType(3);
+        ov.addElement(proi_mark4);
+        imp.setOverlay(ov);
+        
+        mark4_roi=new Roi(refX_mark4-rect_half_size,refY_mark4-rect_half_size,2*rect_half_size,2*rect_half_size);
+        ref_Image.setRoi(mark4_roi);
+        
+        mark4_rect = mark4_roi.getBounds();
+        
+		mark4_ref = ref_Image.crop();
+        if (matchIntensity) {
+        	ImageConverter ic = new ImageConverter(mark4_ref);
+        	ic.convertToGray32();
+        }
+        
+        ip_tmp=mark4_ref.getProcessor();
+        gaussianBlur.blurGaussian(ip_tmp, 2, 2, 0.02);
+        mark4_mideal= doMatch_test(mark4_ref.getProcessor(),(method==0?2:method));
+		
+        int defaultPrecision = Analyzer.getPrecision();
+        Analyzer.setPrecision(6);    
 		if (showRT) {
             
         	
         	
         	rt = new ResultsTable();
         	rt.showRowNumbers(false);
+        	
             
 //            rt.setDecimalPlaces(2, 2);
 //			rt.setDecimalPlaces(3, 2);
@@ -740,24 +748,16 @@ public int setup(String arg, ImagePlus imp) {
 
         }
         
-        
-//        FileInfo fi = imp.getOriginalFileInfo();
-//        String directory = fi.directory;
-//        String name = stack.getSliceLabel(refSlice);
-//        first_shot_time = getShotTime(directory + name);
-//    	if (first_shot_time==null) ExifTime=false;
-		
 		FileInfo fi = null;
         String directory = "";
         String name = "";
         
-        if(!videoInput){
-        	fi = imp.getOriginalFileInfo();
-        	directory = fi.directory;
-        	name = stack.getSliceLabel(refSlice);
-        }
+        fi = imp.getOriginalFileInfo();
+        directory = fi.directory;
+        name = stack.getSliceLabel(refSlice);
         
-    	first_shot_time = getShotTime(directory + name, refSlice);
+        String firstShotPath =  Paths.get(directory, name).toString();
+    	first_shot_time = getShotTime(firstShotPath, refSlice);
     	if (first_shot_time==null) exifTime=false;
 		
 		calcDisplacement();
@@ -829,7 +829,9 @@ public int setup(String arg, ImagePlus imp) {
         for (int i = refSlice + 1; i < stack.getSize() + 1; i++) {    
         	
         	if (!StopThread.isAlive()) {
-        		new WaitForUserDialog("Laser Spot Track4", "The track is finished.").show();
+        		//new WaitForUserDialog("Laser Spot Track4", "The track is finished.").show();
+        		saveResults(directory);
+        		Analyzer.setPrecision(defaultPrecision);
         		return;
         	}
         	
@@ -840,7 +842,7 @@ public int setup(String arg, ImagePlus imp) {
         	
         	if (!videoInput){
 				opener = new Opener();  
-				imageFilePath = directory+stack.getSliceLabel(i);
+				imageFilePath = Paths.get(directory, stack.getSliceLabel(i)).toString();
 				imp_new = opener.openImage(imageFilePath);
 			}
         	
@@ -875,6 +877,7 @@ public int setup(String arg, ImagePlus imp) {
 							disX_mark4=tmp_disX_mark4;
 							disY_mark4=tmp_disY_mark4;
 							
+						if (videoInput) i += (int)impliedFrameRate;
 						continue;
 					}
 					if (matchresult==2) {
@@ -888,6 +891,8 @@ public int setup(String arg, ImagePlus imp) {
 								e.printStackTrace();
 							}
 				        }
+						saveResults(directory);
+						Analyzer.setPrecision(defaultPrecision);
 						return;
 					}
 		            
@@ -898,7 +903,7 @@ public int setup(String arg, ImagePlus imp) {
 		            	
 		                rt.addValue("Time", seconds);
 		                rt.addValue("Frame", "" + rt.getCounter());
-		                if (videoInput) rt.addValue("File", imp.getTitle() + ":" +stack.getSliceLabel(refSlice).replaceAll(" ", ""));
+		                if (videoInput) rt.addValue("File", imp.getTitle() + ":" +stack.getSliceLabel(i).replaceAll(" ", ""));
 		                else rt.addValue("File", stack.getSliceLabel(refSlice));
 		                rt.addValue("dX_pix", dX_pix);
 		                rt.addValue("dY_pix", dY_pix);
@@ -968,6 +973,9 @@ public int setup(String arg, ImagePlus imp) {
 //            	//saveFlattenFrames(((FFmpeg_FrameReader)stack).getDirectory() + "flatten"+File.separatorChar, 0, true);
 //     		   saveFlattenFrames(imp.getOriginalFileInfo().directory + "flatten"+File.separatorChar, 0, true);
 //            }
+            //new WaitForUserDialog("Laser Spot Tracking", "The track is finished.").show();
+            saveResults(directory);
+            Analyzer.setPrecision(defaultPrecision);
         	return;
         }
        
@@ -975,7 +983,11 @@ public int setup(String arg, ImagePlus imp) {
         GenericDialog gd = new GenericDialog("Monitor for additional images");
         gd.addMessage("Do you want to check/monitor the folder for additional images?");
         gd.showDialog();
-        if (gd.wasCanceled()) return;
+        if (gd.wasCanceled()) {
+            saveResults(directory);
+            Analyzer.setPrecision(defaultPrecision);
+            return;
+        }
         
         
         Thread monitorThread = new Thread(new Runnable()
@@ -1003,181 +1015,183 @@ public int setup(String arg, ImagePlus imp) {
 				}
 		}
 			
-	        while (monitorThread.isAlive()) {
-	        	
-	            
-	        	
-	            	File[] fileList = (new File(directory)).listFiles();
-	            	if (fileList != null) {
-	            		
+        while (monitorThread.isAlive()) {
+        	
+            
+        	
+            	File[] fileList = (new File(directory)).listFiles();
+            	if (fileList != null) {
+            		
+	
+	            	// Exclude directories
+	            	String[] tmplist = new String[fileList.length];
+	            	
+	            	
+	            	int c = 0;
+	            	for (int i = 0; i < fileList.length; i++)
+	            		if (fileList[i].isFile())
+	            			tmplist[c++] = fileList[i].getName();
+	            	if (c>0) {
+		            	String[] list = new String[c];
+		            	for (int i = 0; i < c; i++) 
+		            		list[i] = tmplist[i];
+		            	
 		
-		            	// Exclude directories
-		            	String[] tmplist = new String[fileList.length];
-		            	
-		            	
-		            	int c = 0;
-		            	for (int i = 0; i < fileList.length; i++)
-		            		if (fileList[i].isFile())
-		            			tmplist[c++] = fileList[i].getName();
-		            	if (c>0) {
-			            	String[] list = new String[c];
-			            	for (int i = 0; i < c; i++) 
-			            		list[i] = tmplist[i];
+		            	// Now exclude non-image files as per the ImageJ FolderOpener
+		            	FolderOpener fo = new FolderOpener();
+		            	list = fo.trimFileList(list);
+		            	if (list != null && list.length>0){
 			            	
-			
-			            	// Now exclude non-image files as per the ImageJ FolderOpener
-			            	FolderOpener fo = new FolderOpener();
-			            	list = fo.trimFileList(list);
-			            	if (list != null && list.length>0){
-				            	
-				            	VirtualStack vstack = (VirtualStack)imp.getStack();
-				           
-				            	if (list.length > vstack.getSize()) {
-				            		String[] imageList = fo.sortFileList(list);
-				            		String LastSliceName = vstack.getSliceLabel(imp.getCurrentSlice());//vstack.getSliceLabel(vstack.getSize());
-				            		int foundPosition=0;
-				            		boolean filefound=false;
-				            		for (foundPosition = imageList.length-1; foundPosition>= 0; foundPosition--)
-				            		{
-				            			if (LastSliceName.equalsIgnoreCase(imageList[foundPosition])){
-				            				filefound=true;
-				            				break;
-				            			}
-				            		}
-				            		if (filefound)	
-				            				for (int j = foundPosition+1; j<imageList.length;j++)
-				            				{
+			            	VirtualStack vstack = (VirtualStack)imp.getStack();
+			           
+			            	if (list.length > vstack.getSize()) {
+			            		String[] imageList = fo.sortFileList(list);
+			            		String LastSliceName = vstack.getSliceLabel(imp.getCurrentSlice());//vstack.getSliceLabel(vstack.getSize());
+			            		int foundPosition=0;
+			            		boolean filefound=false;
+			            		for (foundPosition = imageList.length-1; foundPosition>= 0; foundPosition--)
+			            		{
+			            			if (LastSliceName.equalsIgnoreCase(imageList[foundPosition])){
+			            				filefound=true;
+			            				break;
+			            			}
+			            		}
+			            		if (filefound)	
+			            				for (int j = foundPosition+1; j<imageList.length;j++)
+			            				{
+			            					
+			            					if (!monitorThread.isAlive()) break;
+			            					
+			            					Opener opener = new Opener();  
+			            					String imageFilePath = Paths.get(directory, imageList[j]).toString();
+			            					ImagePlus imp_new = opener.openImage(imageFilePath);
+			            					if (imp_new!=null 
+			            							&& imp_new.getWidth()==width 
+			            							&& imp_new.getHeight()==height 
+			            							&& imp_new.getBitDepth()==refBitDepth){
+			            						
+			            		        		vstack.addSlice(imageList[j]);
 				            					
-				            					if (!monitorThread.isAlive()) break;
+				            					imp.setStack(vstack);
 				            					
-				            					Opener opener = new Opener();  
-				            					String imageFilePath = directory+imageList[j];
-				            					ImagePlus imp_new = opener.openImage(imageFilePath);
-				            					if (imp_new!=null 
-				            							&& imp_new.getWidth()==width 
-				            							&& imp_new.getHeight()==height 
-				            							&& imp_new.getBitDepth()==refBitDepth){
+				            					imp.setSlice(vstack.getSize());
+				            					
+				            					
+				            					double  tmp_disX_spot=disX_spot,
+				            							tmp_disY_spot=disY_spot,
+				            							tmp_disX_mark1=disX_mark1,
+				            							tmp_disY_mark1=disY_mark1,
+				            							tmp_disX_mark2=disX_mark2,
+				            							tmp_disY_mark2=disY_mark2,
+				            							tmp_disX_mark3=disX_mark3,
+				            							tmp_disY_mark3=disY_mark3,
+				            							tmp_disX_mark4=disX_mark4,
+				            							tmp_disY_mark4=disY_mark4;
+				            				    			            					
+				            					int matchresult = analyseSlice(vstack.getSize(),imp_new.getProcessor());
 				            						
-				            		        		vstack.addSlice(imageList[j]);
-					            					
-					            					imp.setStack(vstack);
-					            					
-					            					imp.setSlice(vstack.getSize());
-					            					
-					            					
-					            					double  tmp_disX_spot=disX_spot,
-					            							tmp_disY_spot=disY_spot,
-					            							tmp_disX_mark1=disX_mark1,
-					            							tmp_disY_mark1=disY_mark1,
-					            							tmp_disX_mark2=disX_mark2,
-					            							tmp_disY_mark2=disY_mark2,
-					            							tmp_disX_mark3=disX_mark3,
-					            							tmp_disY_mark3=disY_mark3,
-					            							tmp_disX_mark4=disX_mark4,
-					            							tmp_disY_mark4=disY_mark4;
-					            				    			            					
-					            					int matchresult = analyseSlice(vstack.getSize(),imp_new.getProcessor());
-					            						
-					            						if (matchresult==1) {
-					            							disX_spot=tmp_disX_spot;
-					            							disY_spot=tmp_disY_spot;
-					            							disX_mark1=tmp_disX_mark1;
-					            							disY_mark1=tmp_disY_mark1;
-					            							disX_mark2=tmp_disX_mark2;
-					            							disY_mark2=tmp_disY_mark2;
-					            							disX_mark3=tmp_disX_mark3;
-					            							disY_mark3=tmp_disY_mark3;
-					            							disX_mark4=tmp_disX_mark4;
-					            							disY_mark4=tmp_disY_mark4;
-					            							//disX_mid=tmp_disX_mid;
-					            							//disY_mid=tmp_disY_mid;
-					            						continue;
-					            						}
-					            						if (matchresult==2) {
-					            							if (monitorDlg!=null) {
-					            					        	monitorDlg.close();
-					            					        	try {
-					            									monitorThread.join();
-					            								} catch (InterruptedException e) {
-					            									// TODO Auto-generated catch block
-					            									e.printStackTrace();
-					            								}
-					            					        }
-					            							return;
-					            						}
-					            						
-						            					//double ddx=disX_spot-disX_holder, ddy=disY_spot-disY_holder;
-						            		            
-						            		            if (showRT) {
-						            		            	rt.incrementCounter();
-						            		            	rt.addValue("Time", seconds);
-						            		            	rt.addValue("Frame", "" + rt.getCounter());
-						            		            	rt.addValue("File", stack.getSliceLabel(vstack.getSize()));
-						            		            	rt.addValue("dX_pix", dX_pix);
-						            		                rt.addValue("dY_pix", dY_pix);
-						            		                rt.addValue("X_abs", x_abs);
-						            		                rt.addValue("Y_abs", y_abs);
-						            		                rt.addValue("dL", dL);
-						            		               
-						            		                
+				            						if (matchresult==1) {
+				            							disX_spot=tmp_disX_spot;
+				            							disY_spot=tmp_disY_spot;
+				            							disX_mark1=tmp_disX_mark1;
+				            							disY_mark1=tmp_disY_mark1;
+				            							disX_mark2=tmp_disX_mark2;
+				            							disY_mark2=tmp_disY_mark2;
+				            							disX_mark3=tmp_disX_mark3;
+				            							disY_mark3=tmp_disY_mark3;
+				            							disX_mark4=tmp_disX_mark4;
+				            							disY_mark4=tmp_disY_mark4;
+				            							//disX_mid=tmp_disX_mid;
+				            							//disY_mid=tmp_disY_mid;
+				            						continue;
+				            						}
+				            						if (matchresult==2) {
+				            							if (monitorDlg!=null) {
+				            					        	monitorDlg.close();
+				            					        	try {
+				            									monitorThread.join();
+				            								} catch (InterruptedException e) {
+				            									// TODO Auto-generated catch block
+				            									e.printStackTrace();
+				            								}
+				            					        }
+				            							return;
+				            						}
+				            						
+					            					//double ddx=disX_spot-disX_holder, ddy=disY_spot-disY_holder;
+					            		            
+					            		            if (showRT) {
+					            		            	rt.incrementCounter();
+					            		            	rt.addValue("Time", seconds);
+					            		            	rt.addValue("Frame", "" + rt.getCounter());
+					            		            	rt.addValue("File", stack.getSliceLabel(vstack.getSize()));
+					            		            	rt.addValue("dX_pix", dX_pix);
+					            		                rt.addValue("dY_pix", dY_pix);
+					            		                rt.addValue("X_abs", x_abs);
+					            		                rt.addValue("Y_abs", y_abs);
+					            		                rt.addValue("dL", dL);
+					            		               
+					            		                
 //						            						rt.setDecimalPlaces(2, 2);
 //						            						rt.setDecimalPlaces(3, 2);
 //						            						rt.setDecimalPlaces(4, 2);
 //						            						rt.setDecimalPlaces(5, 2);
 //						            						rt.setDecimalPlaces(6, 2);
-						            						
-						            		                
-						            		                rt.show("Results");
-						            		                //rt.showRowNumbers(false);
-						            		                
-						            		               
-						            		                
-						            		            }
-						            		            
-						            					displacement_list.add(dL);
-						            					
-						            		            
-						            		            time_list.add(seconds);
-						            		            
-						            		            if (dL>displacement_max) displacement_max=dL;
-						            		            if (dL<displacement_min) displacement_min=dL;
-						            		            
-						            		            
-						            		            
-						            		            double y_height=displacement_max-displacement_min;
-						            		            if (y_height==0.0) y_height=1.0;
-						            		            double y_min=displacement_min-0.1*y_height,
-						            		            	   y_max=displacement_max+0.1*y_height;
-						            		            Plot plot1 = new Plot("Displacement Plot","Time, s","Displacement");
-						            		            plot1.setLimits(0, seconds, y_min, y_max);
-						            		    		plot1.addPoints(time_list, displacement_list, Plot.LINE);
-						            		    		ImageProcessor plotIp = plot1.getProcessor();
-						            		    		plotImage.setProcessor(null, plotIp);
-						            		    		
-						            		    		
-						            		    		
-						            		     		
-						            		     		
-				            					}
-				            				}
-				            			
-				            		}
-				            		
-				            	}
+					            						
+					            		                
+					            		                rt.show("Results");
+					            		                //rt.showRowNumbers(false);
+					            		                
+					            		               
+					            		                
+					            		            }
+					            		            
+					            					displacement_list.add(dL);
+					            					
+					            		            
+					            		            time_list.add(seconds);
+					            		            
+					            		            if (dL>displacement_max) displacement_max=dL;
+					            		            if (dL<displacement_min) displacement_min=dL;
+					            		            
+					            		            
+					            		            
+					            		            double y_height=displacement_max-displacement_min;
+					            		            if (y_height==0.0) y_height=1.0;
+					            		            double y_min=displacement_min-0.1*y_height,
+					            		            	   y_max=displacement_max+0.1*y_height;
+					            		            Plot plot1 = new Plot("Displacement Plot","Time, s","Displacement");
+					            		            plot1.setLimits(0, seconds, y_min, y_max);
+					            		    		plot1.addPoints(time_list, displacement_list, Plot.LINE);
+					            		    		ImageProcessor plotIp = plot1.getProcessor();
+					            		    		plotImage.setProcessor(null, plotIp);
+					            		    		
+					            		    		
+					            		    		
+					            		     		
+					            		     		
+			            					}
+			            				}
+			            			
+			            		}
+			            		
 			            	}
 		            	}
-	            	
-	            	
-	            	synchronized (this){
-		            	try {	
-						this.wait(300);
-						} catch (InterruptedException e) {
-							// TODO Auto-generated catch block
-							e.printStackTrace();
-						}
 	            	}
-	        }
-        new WaitForUserDialog("Laser Spot Tracking", "The tracking is finished.").show();
+            	
+            	
+            	synchronized (this){
+	            	try {	
+					this.wait(300);
+					} catch (InterruptedException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
+            	}
+        }
+        //new WaitForUserDialog("Laser Spot Tracking", "The track is finished.").show();
+        saveResults(directory);
+        Analyzer.setPrecision(defaultPrecision);
     }
 	
 	private boolean checkJavaCV(String version, boolean treatAsMinVer, String components) {
@@ -2224,8 +2238,8 @@ public int setup(String arg, ImagePlus imp) {
         {
         	Instant shot_time;
         	if(videoInput) shot_time = getShotTime("", slice);
-        	else shot_time = getShotTime(imp.getOriginalFileInfo().directory + stack.getSliceLabel(slice), slice);
-             
+        	else shot_time = getShotTime(Paths.get(imp.getOriginalFileInfo().directory, stack.getSliceLabel(slice)).toString(), slice);
+        	 
         	if (shot_time!=null) seconds = Duration.between(first_shot_time, shot_time).toNanos()/1000000000.0;//(new Duration(first_shot_time,shot_time)).getMillis()/1000.0;
         	else 
         	{	
@@ -2467,6 +2481,60 @@ public int setup(String arg, ImagePlus imp) {
         
         return true;
     }
+    
+    private String setProjectNameDlg()
+    {
+        GenericDialog projectNameDialog = new GenericDialog(pluginName);
+        projectNameDialog.addMessage("Set the name of the project to use it for autonaming and saving result files.\n"
+                + "Live empty for manual saving.");
+        projectNameDialog.addStringField("Project name (short description)", "", 32);
+        projectNameDialog.showDialog();
+        if(projectNameDialog.wasCanceled()) return "";
+        return projectNameDialog.getNextString().trim();
+    }
+    
+    private boolean isValidProjectename(String name) {
+        return !Pattern.compile(INVALID_CHARACTERS).matcher(name).find();
+    }
+    
+    private void saveResults(String directory)
+    {
+        boolean goodName = false;
+        String resultsPath = "", plotPath = "";
+        while (!goodName) {
+            projectName = setProjectNameDlg();
+            if (projectName.isEmpty()) 
+            {
+                //new WaitForUserDialog(pluginName, "Do not forget to save results!").show();
+                return;
+            }
+            if (!isValidProjectename(projectName)) {
+                new WaitForUserDialog(pluginName, "Specified name contains forbidden symbols: " + INVALID_CHARACTERS).show();
+                continue;
+            }
+            resultsPath = Paths.get(directory, "Results - " + projectName + ".txt").toString();
+            plotPath = Paths.get(directory, "Displacement plot - " + projectName + ".tif").toString();
+            if (!new File(resultsPath).exists() && !new File(plotPath).exists()) goodName = true;
+            else new WaitForUserDialog(pluginName, "Specified name already exits. Change name or check files!").show();
+        }
+        
+        rt.save(resultsPath);
+        Analyzer.setUnsavedMeasurements(false);
+        FileSaver plotSaver = new FileSaver(plotImage);
+        
+        plotSaver.saveAsTiff(plotPath);
+        FileWriter writer;
+        try {
+            String resultsListPath = Paths.get(directory, "results_list.txt").toString();
+            writer = new FileWriter(resultsListPath, true);
+            writer.write("Results - " + projectName + ".txt Source: " + imp.getOriginalFileInfo().fileName + "\n");
+            writer.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        
+    }
+    
     /*
 	public static IplImage toIplImage(BufferedImage bufImage) {
 
