@@ -20,7 +20,7 @@ import com.drew.metadata.exif.ExifSubIFDDirectory;
 
 import java.awt.Rectangle;
 import java.awt.AWTEvent;
-
+import java.awt.Frame;
 
 import ij.plugin.FolderOpener;
 import ij.plugin.filter.*;
@@ -99,12 +99,11 @@ public class Laser_Spot_Track4 implements PlugInFilter, DialogListener {
     		refX_mark2, refY_mark2,
     		refX_mark3, refY_mark3,
     		refX_mark4, refY_mark4;
-    double  disX_spot=0.0, disY_spot=0.0, 
-    		//disX_holder=0.0, disY_holder=0.0, 
-    		disX_mark1=0.0, disY_mark1=0.0, 
-    		disX_mark2=0.0, disY_mark2=0.0,
-    		disX_mark3=0.0, disY_mark3=0.0,
-    		disX_mark4=0.0, disY_mark4=0.0,
+    double  disX_spot=0.0, disY_spot=0.0, disX_spot0=0.0, disY_spot0=0.0,
+    		disX_mark1=0.0, disY_mark1=0.0, disX_mark10=0.0, disY_mark10=0.0, 
+    		disX_mark2=0.0, disY_mark2=0.0, disX_mark20=0.0, disY_mark20=0.0,
+    		disX_mark3=0.0, disY_mark3=0.0, disX_mark30=0.0, disY_mark30=0.0,
+    		disX_mark4=0.0, disY_mark4=0.0, disX_mark40=0.0, disY_mark40=0.0,
     		dX_pix=0.0, dY_pix=0.0,
     		spotX0=0.0, spotY0=0.0,
     		x_abs, y_abs, 
@@ -145,6 +144,7 @@ public class Laser_Spot_Track4 implements PlugInFilter, DialogListener {
     boolean folderMonitoring=true, updateTemplates=false, exifTime=true, autoSkip=autoSkipDefault, alwaysAutoSkip=autoSkipDefault;
     int autoSkipCounter=0, maxSArea=500;
     volatile WaitForUserDialog stopDlg=null, monitorDlg=null;
+    volatile boolean trackFinished = false;
     
     
     
@@ -164,6 +164,7 @@ public class Laser_Spot_Track4 implements PlugInFilter, DialogListener {
 	int movieFrameNum=0, previousFrameNum=0;
     double impliedFrameRate;
     ImagePlus prevMovieFrame;
+    int trackStep = 1;
 	
 
 
@@ -760,7 +761,8 @@ public int setup(String arg, ImagePlus imp) {
     	first_shot_time = getShotTime(firstShotPath, refSlice);
     	if (first_shot_time==null) exifTime=false;
 		
-		calcDisplacement();
+		//calcDisplacement();
+    	analyseSlice(refSlice, stack.getProcessor(refSlice));
 		
 		
 		
@@ -771,8 +773,8 @@ public int setup(String arg, ImagePlus imp) {
             //rt.addValue("File", stack.getSliceLabel(refSlice));
             if (videoInput) rt.addValue("File", imp.getTitle() + ":" +stack.getSliceLabel(refSlice).replaceAll(" ", ""));
             else rt.addValue("File", stack.getSliceLabel(refSlice));
-            rt.addValue("dX_pix", 0.0);
-            rt.addValue("dY_pix", 0.0);
+            rt.addValue("dX_pix", dX_pix);
+            rt.addValue("dY_pix", dY_pix);
             rt.addValue("X_abs", x_abs);
             rt.addValue("Y_abs", y_abs);
             rt.addValue("dL", dL);
@@ -815,18 +817,42 @@ public int setup(String arg, ImagePlus imp) {
         	@Override
 			public void run() 
 			{
-        		WaitForUserDialog dlg = new WaitForUserDialog("Tracking in progress...", "Close this message to stop the track");
+        	    boolean continueTrack = true;
+        	    String closeMsg = (videoInput ? "Change track step or Stop the track" : "Close this message to stop the track");
+        	    WaitForUserDialog dlg = new WaitForUserDialog("Tracking in progress...", closeMsg);
         		dlg.setName("StopThread");
         		stopDlg=dlg;
-        		dlg.show();
+        		String[] trackOptions = new String[] {"Track every frame", "Track by 0.2 sec", "Track by 0.5 sec", "Track by 1 sec"};
+        		while (continueTrack) {
+        		    continueTrack = false;
+        		    dlg.show();
+        		    if (!trackFinished && videoInput) {
+        		        GenericDialog gDialog = new GenericDialog(pluginName + " - confirm stop or change settings");
+        		        gDialog.addMessage("Press OK to contiune track with new settings\n or press Cancel to stop tracking.");
+        		        gDialog.addRadioButtonGroup("Select frame decimation option", trackOptions, 4, 1, trackOptions[0]);
+        		        gDialog.showDialog();
+        		        if (gDialog.wasCanceled()) {
+        		            continueTrack = false;
+        	            } else {
+        	                continueTrack = true;
+        	                String selectedOptionString = gDialog.getNextRadioButton();
+        	                if (selectedOptionString.equalsIgnoreCase(trackOptions[1])) trackStep = (int)(impliedFrameRate * 0.2);
+        	                else if (selectedOptionString.equalsIgnoreCase(trackOptions[2])) trackStep = (int)(impliedFrameRate * 0.5);
+        	                else if (selectedOptionString.equalsIgnoreCase(trackOptions[3])) trackStep = (int) impliedFrameRate;
+        	                else trackStep = 1;
+        	                
+        	            }
+        		    }
+        		}
+        		
 				
 			}
 		});
 		StopThread.start();	
         
 		
-        
-        for (int i = refSlice + 1; i < stack.getSize() + 1; i++) {    
+		trackFinished = false;
+        for (int i = refSlice + 1; i < stack.getSize() + 1; i+=trackStep) {    
         	
         	if (!StopThread.isAlive()) {
         		//new WaitForUserDialog("Laser Spot Track4", "The track is finished.").show();
@@ -955,10 +981,10 @@ public int setup(String arg, ImagePlus imp) {
             
         }
        
-        
+        trackFinished = true;
         
         if (stopDlg!=null) {
-        	stopDlg.close();
+            stopDlg.close();
         	try {
 				StopThread.join();
 			} catch (InterruptedException e) {
@@ -989,7 +1015,7 @@ public int setup(String arg, ImagePlus imp) {
             return;
         }
         
-        
+        trackFinished = false;
         Thread monitorThread = new Thread(new Runnable()
 		{
         	@Override
@@ -1107,6 +1133,7 @@ public int setup(String arg, ImagePlus imp) {
 				            						}
 				            						if (matchresult==2) {
 				            							if (monitorDlg!=null) {
+				            							    trackFinished = true;
 				            					        	monitorDlg.close();
 				            					        	try {
 				            									monitorThread.join();
@@ -1954,7 +1981,14 @@ public int setup(String arg, ImagePlus imp) {
         disX_mark1 = coord_res[0] + xStart_mark1 - mark1_rect.x;
         disY_mark1 = coord_res[1] + yStart_mark1 - mark1_rect.y;
         
+        //correct first estimation
+        if (firstPoint) {
+            disX_mark10 = disX_mark1;
+            disY_mark10 = disY_mark1;
+        }
         
+        disX_mark1 -= disX_mark10;
+        disY_mark1 -= disY_mark10;
         
        	
 		
@@ -1991,6 +2025,15 @@ public int setup(String arg, ImagePlus imp) {
 		disX_mark2 = coord_res[0] + xStart_mark2 - mark2_rect.x;
         disY_mark2 = coord_res[1] + yStart_mark2 - mark2_rect.y;
         
+      //correct first estimation
+        if (firstPoint) {
+            disX_mark20 = disX_mark2;
+            disY_mark20 = disY_mark2;
+        }
+        
+        disX_mark2 -= disX_mark20;
+        disY_mark2 -= disY_mark20;
+        
         //mark3_mideal= doMatch_test(mark3_ref.getProcessor(),idealMethod);
         coord_res = doMatch_coord_res(mark3_tar.getProcessor(), mark3_ref.getProcessor(), method, subPixel, null);
         
@@ -2022,6 +2065,14 @@ public int setup(String arg, ImagePlus imp) {
 		disX_mark3 = coord_res[0] + xStart_mark3 - mark3_rect.x;
         disY_mark3 = coord_res[1] + yStart_mark3 - mark3_rect.y;
         
+      //correct first estimation
+        if (firstPoint) {
+            disX_mark30 = disX_mark3;
+            disY_mark30 = disY_mark3;
+        }
+        
+        disX_mark3 -= disX_mark30;
+        disY_mark3 -= disY_mark30;
         
         //mark4_mideal= doMatch_test(mark4_ref.getProcessor(),idealMethod);
         coord_res = doMatch_coord_res(mark4_tar.getProcessor(), mark4_ref.getProcessor(), method, subPixel, null);
@@ -2054,6 +2105,14 @@ public int setup(String arg, ImagePlus imp) {
 		disX_mark4 = coord_res[0] + xStart_mark4 - mark4_rect.x;
         disY_mark4 = coord_res[1] + yStart_mark4 - mark4_rect.y;
         
+      //correct first estimation
+        if (firstPoint) {
+            disX_mark40 = disX_mark4;
+            disY_mark40 = disY_mark4;
+        }
+        
+        disX_mark4 -= disX_mark40;
+        disY_mark4 -= disY_mark40;
         
         //// not working part of the template update code
         
@@ -2209,12 +2268,19 @@ public int setup(String arg, ImagePlus imp) {
     			disX_spot = coord_res[0] + xStart_free - spot_rect.x;
                 disY_spot = coord_res[1] + yStart_free - spot_rect.y;
     			
-
+              //correct first estimation
+                if (firstPoint) {
+                    disX_spot0 = disX_spot;
+                    disY_spot0 = disY_spot;
+                }
+                
+                disX_spot -= disX_spot0;
+                disY_spot -= disY_spot0;
             
             
-            
+            if(!firstPoint) anStep++;
 			calcDisplacement();
-			anStep++;
+			
 			x_pix_list.add(refX_spot+disX_spot-disX_mark1);
 			y_pix_list.add(refY_spot+disY_spot-disY_mark1);
 		
@@ -2487,7 +2553,8 @@ public int setup(String arg, ImagePlus imp) {
         GenericDialog projectNameDialog = new GenericDialog(pluginName);
         projectNameDialog.addMessage("Set the name of the project to use it for autonaming and saving result files.\n"
                 + "Live empty for manual saving.");
-        projectNameDialog.addStringField("Project name (short description)", "", 32);
+        String lastProject = Prefs.get("laserspottrack.lastProject", "");
+        projectNameDialog.addStringField("Project name (short description)", lastProject, 32);
         projectNameDialog.showDialog();
         if(projectNameDialog.wasCanceled()) return "";
         return projectNameDialog.getNextString().trim();
@@ -2516,6 +2583,7 @@ public int setup(String arg, ImagePlus imp) {
             plotPath = Paths.get(directory, "Displacement plot - " + projectName + ".tif").toString();
             if (!new File(resultsPath).exists() && !new File(plotPath).exists()) goodName = true;
             else new WaitForUserDialog(pluginName, "Specified name already exits. Change name or check files!").show();
+            Prefs.set("laserspottrack.lastProject", projectName);
         }
         
         rt.save(resultsPath);
