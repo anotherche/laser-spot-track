@@ -903,7 +903,7 @@ public int setup(String arg, ImagePlus imp) {
 							disX_mark4=tmp_disX_mark4;
 							disY_mark4=tmp_disY_mark4;
 							
-						if (videoInput) i += (int)impliedFrameRate;
+						if (videoInput) i += (int)(impliedFrameRate * 0.2);
 						continue;
 					}
 					if (matchresult==2) {
