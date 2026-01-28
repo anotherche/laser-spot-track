@@ -9,7 +9,6 @@ import ij.process.*;
 import ij.gui.*;
 import ij.io.*;
 import java.io.*;
-import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
 import java.time.Instant;
@@ -20,7 +19,6 @@ import com.drew.metadata.exif.ExifSubIFDDirectory;
 
 import java.awt.Rectangle;
 import java.awt.AWTEvent;
-import java.awt.Frame;
 
 import ij.plugin.FolderOpener;
 import ij.plugin.filter.*;
@@ -32,7 +30,6 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Hashtable;
 import java.util.Set;
-import java.util.jar.Attributes.Name;
 import java.util.regex.Pattern;
 
 import javax.swing.JLabel;
@@ -91,10 +88,11 @@ public class Laser_Spot_Track4 implements PlugInFilter, DialogListener {
     static final boolean matchIntensityDefault = true;
     static final boolean subPixelDefault = true;
     
-    int method = matchMethodDefault, refSlice, sArea = searchAreaDefault, templSize = templSizeDefault, anStep=0;
+    int method = matchMethodDefault, refSlice, sArea = searchAreaDefault, templSize = templSizeDefault, anStep = 0;
     double seconds=0, timeStep=1.0, markDist = markDistDefault;
     Instant first_shot_time; 
-    int width, height, refBitDepth, refX_spot, refY_spot, refX_att=0, refY_att=0,
+    int width, height, refBitDepth;
+    float refX_spot, refY_spot,
     		refX_mark1, refY_mark1, 
     		refX_mark2, refY_mark2,
     		refX_mark3, refY_mark3,
@@ -107,7 +105,7 @@ public class Laser_Spot_Track4 implements PlugInFilter, DialogListener {
     		dX_pix=0.0, dY_pix=0.0,
     		spotX0=0.0, spotY0=0.0,
     		x_abs, y_abs, 
-    		dX=0.0, dY=0.0, dL=0.0;
+    		dL=0.0;
     
     private static final Set<String> videoTypes = new HashSet<String>(java.util.Arrays.asList(
 		     new String[] {"WEBM", "MKV", "VOB", "OGV", "OGG", "DRC", "MNG", "AVI", 
@@ -120,19 +118,7 @@ public class Laser_Spot_Track4 implements PlugInFilter, DialogListener {
     private static final String pluginName = "Laser Spot Track";  
     private static final String INVALID_CHARACTERS = "[<>:\"/\\|?*]";
     
-    /*
-    
-    double length_ini=0.0, cr_length, hord_ini,
-    	   curvature_ini, curvature, 
-    	   bending_angle_ini, bending_angle, 
-    	   deflection_angle_ini, deflection_angle, 
-    	   full_angle, full_angle_ini,
-    	   initial_angle,
-    	   deformation;
-    double H0_x,H0_y;
-    
-*/
-    
+        
     
     ArrayList<Double> displacement_list, x_pix_list, y_pix_list, 
     				  time_list, spot_matchRes, attEnd_matchRes, 
@@ -155,13 +141,13 @@ public class Laser_Spot_Track4 implements PlugInFilter, DialogListener {
     boolean subPixel = true;
     boolean matchIntensity = false;
     boolean showRT = true;
-    boolean firstPoint = true, videoInput=videoInputDefault, stopPlugin=false, useTimeStamps=true, javacvInstalled = false;
+    boolean firstPoint = true, videoInput=videoInputDefault, stopPlugin = false, useTimeStamps = true, javacvInstalled = false;
 	Roi refCropRoi = null;
 	//Roi mid_refCropRoi = null;
 	double[] matchThreshold=new double[]{0.1, 0.1, 0.05, 0.05, 0.2, 0.2};
 	ImageWindow imgWindow;
 	
-	int movieFrameNum=0, previousFrameNum=0;
+	int movieFrameNum = 0, previousFrameNum = 0;
     double impliedFrameRate;
     ImagePlus prevMovieFrame;
     int trackStep = 1;
@@ -179,57 +165,9 @@ public class Laser_Spot_Track4 implements PlugInFilter, DialogListener {
         timeStep = gd.getNextNumber();
 	}
 	
-	/*
-	private boolean setStandardCrystalLength() {
-		GenericDialog gd = new GenericDialog("Adjust crystal length");
-        gd.addMessage("Set standard crystal length to adjust position of the attached end");
-        gd.addMessage(String.format("Current crystal length: %.1f", length_ini));
-        gd.addNumericField("Standard length in pixels ", length_ini, 0);
-        gd.showDialog();
-        if (gd.wasCanceled()) {
-            return false;
-        }
-        
-        double std_length = (int) gd.getNextNumber();
-        refX_att = refX_spot + (int)(std_length*(refX_att - refX_spot)/length_ini);
-        refY_att = refY_spot + (int)(std_length*(refY_att - refY_spot)/length_ini);
-        H0_x=refX_spot-refX_att;
-        H0_y=refY_spot-refY_att;
-        length_ini=Math.sqrt(H0_x*H0_x+H0_y*H0_y);
-        hord_ini= length_ini;
-        
-        full_angle_ini=Math.acos(H0_x/hord_ini);
-        if (refY_spot>refY_att) full_angle_ini=-full_angle_ini;
-        
-        refX_mid = (refX_spot + refX_att)/2;
-        refY_mid = (refY_spot + refY_att)/2;
 
-        return true;
-
-	}
-*/
 	
-//    public int setup(String arg, ImagePlus imp) {
-//    	
-//    	int returnMask = NO_IMAGE_REQUIRED + DOES_8G + DOES_16 +  DOES_32 + DOES_RGB + STACK_REQUIRED;
-//    	
-//    	if (!CheckJavaCV("1.5", true, "opencv"))
-//    	{
-//    		return returnMask;
-//    	}
-//    	
-//    	 this.imp = imp;
-//         if (imp==null || imp.getStack()==null || imp.getStackSize()<2 || !imp.getStack().isVirtual()) {
-//         	IJ.run("Image Sequence...");
-//         	this.imp = IJ.getImage();
-//         	
-//         }
-//         
-//         return returnMask;
-//    }
-	
-	
-public int setup(String arg, ImagePlus imp) {
+	public int setup(String arg, ImagePlus imp) {
     	
 		int returnMask = NO_IMAGE_REQUIRED + DOES_8G + DOES_16 +  DOES_32 + DOES_RGB + STACK_REQUIRED;
     	//IJ.run("Install JavaCV libraries", "select=[Install missing] opencv openblas");
@@ -525,8 +463,8 @@ public int setup(String arg, ImagePlus imp) {
         width = imp.getWidth();
         height = imp.getHeight();
         refBitDepth = imp.getBitDepth();
-		disX_spot=0.0;
-		disY_spot=0.0;
+		disX_spot = 0.0;
+		disY_spot = 0.0;
 		
 		
 		
@@ -549,29 +487,29 @@ public int setup(String arg, ImagePlus imp) {
         new WaitForUserDialog("Laser_Spot_Track4", "Select a point in the center of the spot...\nthen press OK.").show();
         
         proi_spot = (PointRoi)imp.getRoi();
-        if (proi_spot!=null) {
-        refX_spot=proi_spot.getPolygon().xpoints[0];
-        refY_spot=proi_spot.getPolygon().ypoints[0];
+        if (proi_spot != null) {
+        refX_spot = proi_spot.getFloatPolygon().xpoints[0];
+        refY_spot = proi_spot.getFloatPolygon().ypoints[0];
         } else {
         	IJ.showMessage("Error", "point ROI needed");
             return;
         }
         
-        int d1 = refX_spot, d2 = width - refX_spot, d3 = refY_spot, d4 = height - refY_spot;
-        int dmin = Math.min(Math.min(d1, d2), Math.min(d3, d4));
+        float d1 = refX_spot, d2 = width - refX_spot, d3 = refY_spot, d4 = height - refY_spot;
+        float dmin = Math.min(Math.min(d1, d2), Math.min(d3, d4));
         if (dmin<=templSize/2+sArea+1)
         {
         	IJ.showMessage("Error", "Search point is to close to the edge.\nReduce template rectangle size on the first dialog.");
             return;
         }
         
-        int rect_half_size=templSize/2;
+        float rect_half_size = templSize / 2.0f;
                              
 		proi_spot.setPointType(3);
         ov.addElement(proi_spot);
         imp.setOverlay(ov);
         
-        spot_roi=new Roi(refX_spot-rect_half_size,refY_spot-rect_half_size,2*rect_half_size,2*rect_half_size);
+        spot_roi = new Roi((int)(refX_spot - rect_half_size), (int)(refY_spot - rect_half_size), (int)(2 * rect_half_size), (int)(2 * rect_half_size));
         ref_Image.setRoi(spot_roi);
         
         spot_rect = spot_roi.getBounds();
@@ -601,8 +539,8 @@ public int setup(String arg, ImagePlus imp) {
         
         proi_mark1 = (PointRoi)imp.getRoi();
         if (proi_mark1!=null) {
-        refX_mark1=proi_mark1.getPolygon().xpoints[0];
-        refY_mark1=proi_mark1.getPolygon().ypoints[0];
+        refX_mark1 = proi_mark1.getFloatPolygon().xpoints[0];
+        refY_mark1 = proi_mark1.getFloatPolygon().ypoints[0];
         } else {
         	IJ.showMessage("Error", "point ROI needed");
             return;
@@ -612,7 +550,7 @@ public int setup(String arg, ImagePlus imp) {
         ov.addElement(proi_mark1);
         imp.setOverlay(ov);
         
-        mark1_roi=new Roi(refX_mark1-rect_half_size,refY_mark1-rect_half_size,2*rect_half_size,2*rect_half_size);
+        mark1_roi = new Roi((int)(refX_mark1-rect_half_size), (int)(refY_mark1-rect_half_size), (int)(2*rect_half_size), (int)(2*rect_half_size));
         ref_Image.setRoi(mark1_roi);
         
         mark1_rect = mark1_roi.getBounds();
@@ -623,9 +561,9 @@ public int setup(String arg, ImagePlus imp) {
         	ic.convertToGray32();
         }
         
-        ip_tmp=mark1_ref.getProcessor();
+        ip_tmp = mark1_ref.getProcessor();
         gaussianBlur.blurGaussian(ip_tmp, 2, 2, 0.02);
-        mark1_mideal= doMatch_test(mark1_ref.getProcessor(),(method==0?2:method));
+        mark1_mideal = doMatch_test(mark1_ref.getProcessor(),(method==0?2:method));
         
         imp.killRoi();
 		
@@ -635,8 +573,8 @@ public int setup(String arg, ImagePlus imp) {
         
         proi_mark2 = (PointRoi)imp.getRoi();
         if (proi_mark2!=null) {
-        refX_mark2=proi_mark2.getPolygon().xpoints[0];
-        refY_mark2=proi_mark2.getPolygon().ypoints[0];
+        refX_mark2 = proi_mark2.getFloatPolygon().xpoints[0];
+        refY_mark2 = proi_mark2.getFloatPolygon().ypoints[0];
         } else {
         	IJ.showMessage("Error", "point ROI needed");
             return;
@@ -646,7 +584,7 @@ public int setup(String arg, ImagePlus imp) {
         ov.addElement(proi_mark2);
         imp.setOverlay(ov);
         
-        mark2_roi=new Roi(refX_mark2-rect_half_size,refY_mark2-rect_half_size,2*rect_half_size,2*rect_half_size);
+        mark2_roi=new Roi((int)(refX_mark2-rect_half_size), (int)(refY_mark2-rect_half_size), (int)(2*rect_half_size), (int)(2*rect_half_size));
         ref_Image.setRoi(mark2_roi);
         
         mark2_rect = mark2_roi.getBounds();
@@ -657,9 +595,9 @@ public int setup(String arg, ImagePlus imp) {
         	ic.convertToGray32();
         }
         
-        ip_tmp=mark2_ref.getProcessor();
+        ip_tmp = mark2_ref.getProcessor();
         gaussianBlur.blurGaussian(ip_tmp, 2, 2, 0.02);
-        mark2_mideal= doMatch_test(mark2_ref.getProcessor(),(method==0?2:method));
+        mark2_mideal = doMatch_test(mark2_ref.getProcessor(),(method==0?2:method));
         imp.killRoi();
 		
 		
@@ -667,9 +605,9 @@ public int setup(String arg, ImagePlus imp) {
         new WaitForUserDialog("Laser_Spot_Track4", "Select a point in the center of the Mark3...\nthen press OK.").show();
         
         proi_mark3 = (PointRoi)imp.getRoi();
-        if (proi_mark3!=null) {
-        refX_mark3=proi_mark3.getPolygon().xpoints[0];
-        refY_mark3=proi_mark3.getPolygon().ypoints[0];
+        if (proi_mark3 != null) {
+        refX_mark3 = proi_mark3.getFloatPolygon().xpoints[0];
+        refY_mark3 = proi_mark3.getFloatPolygon().ypoints[0];
         } else {
         	IJ.showMessage("Error", "point ROI needed");
             return;
@@ -679,7 +617,7 @@ public int setup(String arg, ImagePlus imp) {
         ov.addElement(proi_mark3);
         imp.setOverlay(ov);
         
-        mark3_roi=new Roi(refX_mark3-rect_half_size,refY_mark3-rect_half_size,2*rect_half_size,2*rect_half_size);
+        mark3_roi = new Roi((int)(refX_mark3-rect_half_size), (int)(refY_mark3-rect_half_size), (int)(2*rect_half_size), (int)(2*rect_half_size));
         ref_Image.setRoi(mark3_roi);
         
         mark3_rect = mark3_roi.getBounds();
@@ -690,9 +628,9 @@ public int setup(String arg, ImagePlus imp) {
         	ic.convertToGray32();
         }
         
-        ip_tmp=mark3_ref.getProcessor();
+        ip_tmp = mark3_ref.getProcessor();
         gaussianBlur.blurGaussian(ip_tmp, 2, 2, 0.02);
-        mark3_mideal= doMatch_test(mark3_ref.getProcessor(),(method==0?2:method));
+        mark3_mideal = doMatch_test(mark3_ref.getProcessor(),(method==0?2:method));
         imp.killRoi();
 		
 		
@@ -700,9 +638,9 @@ public int setup(String arg, ImagePlus imp) {
         new WaitForUserDialog("Laser_Spot_Track4", "Select a point in the center of the Mark4...\nthen press OK.").show();
         
         proi_mark4 = (PointRoi)imp.getRoi();
-        if (proi_mark4!=null) {
-        refX_mark4=proi_mark4.getPolygon().xpoints[0];
-        refY_mark4=proi_mark4.getPolygon().ypoints[0];
+        if (proi_mark4 != null) {
+        refX_mark4 = proi_mark4.getFloatPolygon().xpoints[0];
+        refY_mark4 = proi_mark4.getFloatPolygon().ypoints[0];
         } else {
         	IJ.showMessage("Error", "point ROI needed");
             return;
@@ -712,7 +650,7 @@ public int setup(String arg, ImagePlus imp) {
         ov.addElement(proi_mark4);
         imp.setOverlay(ov);
         
-        mark4_roi=new Roi(refX_mark4-rect_half_size,refY_mark4-rect_half_size,2*rect_half_size,2*rect_half_size);
+        mark4_roi = new Roi((int)(refX_mark4-rect_half_size), (int)(refY_mark4-rect_half_size), (int)(2*rect_half_size), (int)(2*rect_half_size));
         ref_Image.setRoi(mark4_roi);
         
         mark4_rect = mark4_roi.getBounds();
@@ -723,7 +661,7 @@ public int setup(String arg, ImagePlus imp) {
         	ic.convertToGray32();
         }
         
-        ip_tmp=mark4_ref.getProcessor();
+        ip_tmp = mark4_ref.getProcessor();
         gaussianBlur.blurGaussian(ip_tmp, 2, 2, 0.02);
         mark4_mideal= doMatch_test(mark4_ref.getProcessor(),(method==0?2:method));
 		
@@ -761,8 +699,8 @@ public int setup(String arg, ImagePlus imp) {
     	first_shot_time = getShotTime(firstShotPath, refSlice);
     	if (first_shot_time==null) exifTime=false;
 		
-		//calcDisplacement();
-    	analyseSlice(refSlice, stack.getProcessor(refSlice));
+		calcDisplacement();
+    	//analyseSlice(refSlice, stack.getProcessor(refSlice));
 		
 		
 		
@@ -797,8 +735,8 @@ public int setup(String arg, ImagePlus imp) {
 		ref_Image.deleteRoi();
 		
 		displacement_list.add(dL);
-		x_pix_list.add(refX_spot+disX_spot-disX_mark1);
-		y_pix_list.add(refY_spot+disY_spot-disY_mark1);
+		x_pix_list.add(refX_spot + disX_spot - disX_mark1);
+		y_pix_list.add(refY_spot + disY_spot - disY_mark1);
        
         time_list.add(0.0);
         
@@ -818,7 +756,7 @@ public int setup(String arg, ImagePlus imp) {
 			public void run() 
 			{
         	    boolean continueTrack = true;
-        	    String closeMsg = (videoInput ? "Change track step or Stop the track" : "Close this message to stop the track");
+        	    String closeMsg = (videoInput ? "Change the tracking step or stop tracking" : "Close this message to stop the track");
         	    WaitForUserDialog dlg = new WaitForUserDialog("Tracking in progress...", closeMsg);
         		dlg.setName("StopThread");
         		stopDlg=dlg;
@@ -913,7 +851,6 @@ public int setup(String arg, ImagePlus imp) {
 				        	try {
 								StopThread.join();
 							} catch (InterruptedException e) {
-								// TODO Auto-generated catch block
 								e.printStackTrace();
 							}
 				        }
@@ -936,31 +873,14 @@ public int setup(String arg, ImagePlus imp) {
 		                rt.addValue("X_abs", x_abs);
 		                rt.addValue("Y_abs", y_abs);
 		                rt.addValue("dL", dL);
-		               
-		                
-//						rt.setDecimalPlaces(2, 2);
-//						rt.setDecimalPlaces(3, 2);
-//						rt.setDecimalPlaces(4, 2);
-//						rt.setDecimalPlaces(5, 2);
-//						rt.setDecimalPlaces(6, 2);
-						
-						
-		
+
 		                rt.show("Results");
-		                //rt.showRowNumbers(false);
-		                
-		                
-		                
-		                
 		            }
 					displacement_list.add(dL);
-					
-		            
-		            time_list.add(seconds);
+					time_list.add(seconds);
 		            
 		            if (dL>displacement_max) displacement_max=dL;
 		            if (dL<displacement_min) displacement_min=dL;
-		            
 		            
 		            double y_height=displacement_max-displacement_min;
 		            if (y_height==0.0) y_height=1.0;
@@ -994,12 +914,6 @@ public int setup(String arg, ImagePlus imp) {
         }
         	
         if (videoInput){
-//     	   if (saveFlatten){
-//            	
-//            	//saveFlattenFrames(((FFmpeg_FrameReader)stack).getDirectory() + "flatten"+File.separatorChar, 0, true);
-//     		   saveFlattenFrames(imp.getOriginalFileInfo().directory + "flatten"+File.separatorChar, 0, true);
-//            }
-            //new WaitForUserDialog("Laser Spot Tracking", "The track is finished.").show();
             saveResults(directory);
             Analyzer.setPrecision(defaultPrecision);
         	return;
@@ -1399,41 +1313,37 @@ public int setup(String arg, ImagePlus imp) {
         
         ImagePlus tmpIp;
         
-         int xStart_free=0 ,yStart_free=0, sWX_free=width, sWY_free=height, 
-        	 
-        	 xStart_mark1=0, yStart_mark1=0, sWX_mark1=width, sWY_mark1=height,
-        	 xStart_mark2=0, yStart_mark2=0, sWX_mark2=width, sWY_mark2=height,
-        	 xStart_mark3=0, yStart_mark3=0, sWX_mark3=width, sWY_mark3=height,
-        	 xStart_mark4=0, yStart_mark4=0, sWX_mark4=width, sWY_mark4=height;
+        int xStart_spot=0 ,yStart_spot=0, sWX_spot=width, sWY_spot=height, 
+            xStart_mark1=0, yStart_mark1=0, sWX_mark1=width, sWY_mark1=height,
+        	xStart_mark2=0, yStart_mark2=0, sWX_mark2=width, sWY_mark2=height,
+        	xStart_mark3=0, yStart_mark3=0, sWX_mark3=width, sWY_mark3=height,
+        	xStart_mark4=0, yStart_mark4=0, sWX_mark4=width, sWY_mark4=height;
         	 
         
        
 
         if (sArea != 0) {
-
-
         	// Specifying coordinates of the search rectangle around the free end
-        	
-            xStart_free = spot_rect.x + (int)disX_spot - sArea;
-            yStart_free = spot_rect.y + (int)disY_spot - sArea;
-            sWX_free = spot_rect.width + 2 * sArea;
-            sWY_free = spot_rect.height + 2 * sArea;
+            xStart_spot = spot_rect.x + (int)disX_spot - sArea;
+            yStart_spot = spot_rect.y + (int)disY_spot - sArea;
+            sWX_spot = spot_rect.width + 2 * sArea;
+            sWY_spot = spot_rect.height + 2 * sArea;
 
-            if (xStart_free < 0) {
-                xStart_free = 0;
+            if (xStart_spot < 0) {
+                xStart_spot = 0;
             }
-            if (yStart_free < 0) {
-                yStart_free = 0;
+            if (yStart_spot < 0) {
+                yStart_spot = 0;
             }
-            if (xStart_free + sWX_free > width) {
-                xStart_free = width - sWX_free;
+            if (xStart_spot + sWX_spot > width) {
+                xStart_spot = width - sWX_spot;
             }
-            if (yStart_free + sWY_free > height) {
-                yStart_free = height - sWY_free;
+            if (yStart_spot + sWY_spot > height) {
+                yStart_spot = height - sWY_spot;
             }
             
             // Small image containing free crystal's end
-            spot_tar.setRoi(xStart_free, yStart_free, sWX_free, sWY_free);
+            spot_tar.setRoi(xStart_spot, yStart_spot, sWX_spot, sWY_spot);
             spot_tar=spot_tar.crop();
             
             
@@ -1605,25 +1515,25 @@ public int setup(String arg, ImagePlus imp) {
 			        					double xShift = coord_res[0] - mark1_rect.x - disX_mark1,
 			        							yShift = coord_res[1] - mark1_rect.y - disY_mark1;
 			
-			        					xStart_free += xShift;
-			        		            yStart_free += yShift;
+			        					xStart_spot += xShift;
+			        		            yStart_spot += yShift;
 			        		            
 			
-			        		            if (xStart_free < 0) {
-			        		                xStart_free = 0;
+			        		            if (xStart_spot < 0) {
+			        		                xStart_spot = 0;
 			        		            }
-			        		            if (yStart_free < 0) {
-			        		                yStart_free = 0;
+			        		            if (yStart_spot < 0) {
+			        		                yStart_spot = 0;
 			        		            }
-			        		            if (xStart_free + sWX_free > width) {
-			        		                xStart_free = width - sWX_free;
+			        		            if (xStart_spot + sWX_spot > width) {
+			        		                xStart_spot = width - sWX_spot;
 			        		            }
-			        		            if (yStart_free + sWY_free > height) {
-			        		                yStart_free = height - sWY_free;
+			        		            if (yStart_spot + sWY_spot > height) {
+			        		                yStart_spot = height - sWY_spot;
 			        		            }
 			        		            
 			        		            // Small image with spot
-			        		            spot_tar.setRoi(xStart_free, yStart_free, sWX_free, sWY_free);
+			        		            spot_tar.setRoi(xStart_spot, yStart_spot, sWX_spot, sWY_spot);
 			        		            spot_tar=spot_tar.crop();
 			        		            
 			        		            
@@ -1847,26 +1757,26 @@ public int setup(String arg, ImagePlus imp) {
 				double xShift = coord_res[0] + xStart_mark1 - mark1_rect.x - disX_mark1,
 						yShift = coord_res[1] + yStart_mark1 - mark1_rect.y - disY_mark1;
 
-				xStart_free += xShift;
-		        yStart_free += yShift;
+				xStart_spot += xShift;
+		        yStart_spot += yShift;
 		        
 
-		        if (xStart_free < 0) {
-		            xStart_free = 0;
+		        if (xStart_spot < 0) {
+		            xStart_spot = 0;
 		        }
-		        if (yStart_free < 0) {
-		            yStart_free = 0;
+		        if (yStart_spot < 0) {
+		            yStart_spot = 0;
 		        }
-		        if (xStart_free + sWX_free > width) {
-		            xStart_free = width - sWX_free;
+		        if (xStart_spot + sWX_spot > width) {
+		            xStart_spot = width - sWX_spot;
 		        }
-		        if (yStart_free + sWY_free > height) {
-		            yStart_free = height - sWY_free;
+		        if (yStart_spot + sWY_spot > height) {
+		            yStart_spot = height - sWY_spot;
 		        }
 		        
 		        spot_tar = new ImagePlus("",slice_proc);
 		        // Small image with spot
-		        spot_tar.setRoi(xStart_free, yStart_free, sWX_free, sWY_free);
+		        spot_tar.setRoi(xStart_spot, yStart_spot, sWX_spot, sWY_spot);
 		        spot_tar=spot_tar.crop();
 		        
 		        
@@ -1982,13 +1892,14 @@ public int setup(String arg, ImagePlus imp) {
         disY_mark1 = coord_res[1] + yStart_mark1 - mark1_rect.y;
         
         //correct first estimation
-        if (firstPoint) {
-            disX_mark10 = disX_mark1;
-            disY_mark10 = disY_mark1;
-        }
-        
-        disX_mark1 -= disX_mark10;
-        disY_mark1 -= disY_mark10;
+        //remove the correction!!!
+//        if (firstPoint) {
+//            disX_mark10 = disX_mark1;
+//            disY_mark10 = disY_mark1;
+//        }
+//        
+//        disX_mark1 -= disX_mark10;
+//        disY_mark1 -= disY_mark10;
         
        	
 		
@@ -2025,14 +1936,15 @@ public int setup(String arg, ImagePlus imp) {
 		disX_mark2 = coord_res[0] + xStart_mark2 - mark2_rect.x;
         disY_mark2 = coord_res[1] + yStart_mark2 - mark2_rect.y;
         
-      //correct first estimation
-        if (firstPoint) {
-            disX_mark20 = disX_mark2;
-            disY_mark20 = disY_mark2;
-        }
-        
-        disX_mark2 -= disX_mark20;
-        disY_mark2 -= disY_mark20;
+        //correct first estimation
+        //remove the correction!!
+//        if (firstPoint) {
+//            disX_mark20 = disX_mark2;
+//            disY_mark20 = disY_mark2;
+//        }
+//        
+//        disX_mark2 -= disX_mark20;
+//        disY_mark2 -= disY_mark20;
         
         //mark3_mideal= doMatch_test(mark3_ref.getProcessor(),idealMethod);
         coord_res = doMatch_coord_res(mark3_tar.getProcessor(), mark3_ref.getProcessor(), method, subPixel, null);
@@ -2065,14 +1977,15 @@ public int setup(String arg, ImagePlus imp) {
 		disX_mark3 = coord_res[0] + xStart_mark3 - mark3_rect.x;
         disY_mark3 = coord_res[1] + yStart_mark3 - mark3_rect.y;
         
-      //correct first estimation
-        if (firstPoint) {
-            disX_mark30 = disX_mark3;
-            disY_mark30 = disY_mark3;
-        }
-        
-        disX_mark3 -= disX_mark30;
-        disY_mark3 -= disY_mark30;
+        //correct first estimation
+        //remove the correction!!!
+//        if (firstPoint) {
+//            disX_mark30 = disX_mark3;
+//            disY_mark30 = disY_mark3;
+//        }
+//        
+//        disX_mark3 -= disX_mark30;
+//        disY_mark3 -= disY_mark30;
         
         //mark4_mideal= doMatch_test(mark4_ref.getProcessor(),idealMethod);
         coord_res = doMatch_coord_res(mark4_tar.getProcessor(), mark4_ref.getProcessor(), method, subPixel, null);
@@ -2105,14 +2018,15 @@ public int setup(String arg, ImagePlus imp) {
 		disX_mark4 = coord_res[0] + xStart_mark4 - mark4_rect.x;
         disY_mark4 = coord_res[1] + yStart_mark4 - mark4_rect.y;
         
-      //correct first estimation
-        if (firstPoint) {
-            disX_mark40 = disX_mark4;
-            disY_mark40 = disY_mark4;
-        }
-        
-        disX_mark4 -= disX_mark40;
-        disY_mark4 -= disY_mark40;
+        //correct first estimation
+        //remove the correction
+//        if (firstPoint) {
+//            disX_mark40 = disX_mark4;
+//            disY_mark40 = disY_mark4;
+//        }
+//        
+//        disX_mark4 -= disX_mark40;
+//        disY_mark4 -= disY_mark40;
         
         //// not working part of the template update code
         
@@ -2130,125 +2044,125 @@ public int setup(String arg, ImagePlus imp) {
         //}
         
         
-    			spot_tpl = spot_ref.duplicate();
-    			
-      			
-				spot_mideal=doMatch_test(spot_tpl.getProcessor(), (method==0?2:method));
-    			coord_res = doMatch_coord_res(spot_tar.getProcessor(), spot_tpl.getProcessor(), method, subPixel, null);
+		spot_tpl = spot_ref.duplicate();
+		
+		
+		spot_mideal=doMatch_test(spot_tpl.getProcessor(), (method==0?2:method));
+		coord_res = doMatch_coord_res(spot_tar.getProcessor(), spot_tpl.getProcessor(), method, subPixel, null);
 
-    			if (!testMatchResult(coord_res[2], spot_mideal, method, coord_res[0], coord_res[1], sArea*2, templSize)) {
-    				
-    				
-    				//IJ.showMessage("Spot is lost");
-    				
-    				int sArea_new=sArea;
-    				boolean newSpotPositionFound=false, leftBound=false, rightBound=false, bottomBound=false, upperBound=false;
-    				
-    				if (sArea!=0)
-    				while(!newSpotPositionFound && !(leftBound && rightBound && bottomBound && upperBound)){
-    				
-    					
-    					sArea_new*=2;
-    					if (autoSkip && maxSArea!=0 && sArea_new>maxSArea) break;
-    					//IJ.showMessage("Try to find in area = " + sArea_new);
-    					xStart_free = spot_rect.x + (int)disX_spot - sArea_new;
-    		            yStart_free = spot_rect.y + (int)disY_spot - sArea_new;
-    		            sWX_free = spot_rect.width + 2 * sArea_new;
-    		            sWY_free = spot_rect.height + 2 * sArea_new;
+		if (!testMatchResult(coord_res[2], spot_mideal, method, coord_res[0], coord_res[1], sArea*2, templSize)) {
+			
+			
+			//IJ.showMessage("Spot is lost");
+			
+			int sArea_new=sArea;
+			boolean newSpotPositionFound=false, leftBound=false, rightBound=false, bottomBound=false, upperBound=false;
+			
+			if (sArea!=0)
+			while(!newSpotPositionFound && !(leftBound && rightBound && bottomBound && upperBound)){
+			
+				
+				sArea_new*=2;
+				if (autoSkip && maxSArea!=0 && sArea_new>maxSArea) break;
+				//IJ.showMessage("Try to find in area = " + sArea_new);
+				xStart_spot = spot_rect.x + (int)disX_spot - sArea_new;
+	            yStart_spot = spot_rect.y + (int)disY_spot - sArea_new;
+	            sWX_spot = spot_rect.width + 2 * sArea_new;
+	            sWY_spot = spot_rect.height + 2 * sArea_new;
 
-    		            if (xStart_free < 0) {
-    		                xStart_free = 0;
-    		                leftBound=true;
-    		            }
-    		            if (yStart_free < 0) {
-    		                yStart_free = 0;
-    		                upperBound=true;
-    		            }
-    		            if (xStart_free + sWX_free > width) {
-    		            	sWX_free = width - xStart_free;
-    		                rightBound=true;
-    		            }
-    		            if (yStart_free + sWY_free > height) {
-    		            	sWY_free = height - yStart_free;
-    		                bottomBound=true;
-    		            }
-    		            
-    		            spot_tar = new ImagePlus("",slice_proc);
-    		            
-    		            spot_tar.setRoi(xStart_free, yStart_free, sWX_free, sWY_free);
-    		            spot_tar=spot_tar.crop();
-    		            
-    		            if (matchIntensity) {
-    		            	ImageConverter ic = new ImageConverter(spot_tar);
-    		            	ic.convertToGray32();
-    		            
-    		            }
-    		            gaussianBlur.blurGaussian(spot_tar.getProcessor(), 2, 2, 0.02); 
-    		            
-    		            coord_res = doMatch_coord_res(spot_tar.getProcessor(), spot_tpl.getProcessor(), method, subPixel, null);
+	            if (xStart_spot < 0) {
+	                xStart_spot = 0;
+	                leftBound=true;
+	            }
+	            if (yStart_spot < 0) {
+	                yStart_spot = 0;
+	                upperBound=true;
+	            }
+	            if (xStart_spot + sWX_spot > width) {
+	            	sWX_spot = width - xStart_spot;
+	                rightBound=true;
+	            }
+	            if (yStart_spot + sWY_spot > height) {
+	            	sWY_spot = height - yStart_spot;
+	                bottomBound=true;
+	            }
+	            
+	            spot_tar = new ImagePlus("",slice_proc);
+	            
+	            spot_tar.setRoi(xStart_spot, yStart_spot, sWX_spot, sWY_spot);
+	            spot_tar=spot_tar.crop();
+	            
+	            if (matchIntensity) {
+	            	ImageConverter ic = new ImageConverter(spot_tar);
+	            	ic.convertToGray32();
+	            
+	            }
+	            gaussianBlur.blurGaussian(spot_tar.getProcessor(), 2, 2, 0.02); 
+	            
+	            coord_res = doMatch_coord_res(spot_tar.getProcessor(), spot_tpl.getProcessor(), method, subPixel, null);
 
-    	    			if (!testMatchResult(coord_res[2], spot_mideal, method, coord_res[0], coord_res[1], sArea_new*2, templSize)) {
-    	    				
-    	    				
-    	    				if (refBitDepth==24 && !matchIntensity) {
-    	         				tmpIp = spot_tpl.duplicate();
-    	         				ImageConverter ic = new ImageConverter(tmpIp);
-    	                    	ic.convertToGray32();
-    	         			} else tmpIp=spot_tpl;
-    	        			ImageRoi imageRoi = new ImageRoi((int)coord_res[0] + xStart_free, (int)coord_res[1]+ yStart_free,tmpIp.getProcessor());
-    	        	        imageRoi.setOpacity(0.3);
-    	        	        overlay = new Overlay();
-    	        	        overlay.addElement(imageRoi);
-    	        			//imp.setSlice(slice);
-    	        			
-    	        			overlay.addElement(new Roi(xStart_free, yStart_free, sWX_free, sWY_free));
-    	        			imp.setSlice(slice);
-    	        			imp.setOverlay(overlay);
-    	        			//IJ.showMessage("Not found in Area=" + sArea_new);
-    	    				
-    	    			} else {
-    	    				//IJ.showMessage("Found in Area = " + sArea_new);
-    	    				newSpotPositionFound=true;
-    	    			}
-    		            
-    				}
+    			if (!testMatchResult(coord_res[2], spot_mideal, method, coord_res[0], coord_res[1], sArea_new*2, templSize)) {
     				
     				
+    				if (refBitDepth==24 && !matchIntensity) {
+         				tmpIp = spot_tpl.duplicate();
+         				ImageConverter ic = new ImageConverter(tmpIp);
+                    	ic.convertToGray32();
+         			} else tmpIp=spot_tpl;
+        			ImageRoi imageRoi = new ImageRoi((int)coord_res[0] + xStart_spot, (int)coord_res[1]+ yStart_spot,tmpIp.getProcessor());
+        	        imageRoi.setOpacity(0.3);
+        	        overlay = new Overlay();
+        	        overlay.addElement(imageRoi);
+        			//imp.setSlice(slice);
+        			
+        			overlay.addElement(new Roi(xStart_spot, yStart_spot, sWX_spot, sWY_spot));
+        			imp.setSlice(slice);
+        			imp.setOverlay(overlay);
+        			//IJ.showMessage("Not found in Area=" + sArea_new);
     				
-    				if (!newSpotPositionFound){
-    					
-	    				overlay = new Overlay();
-	    				if (refBitDepth==24 && !matchIntensity) {
-	         				tmpIp = spot_tpl.duplicate();
-	         				ImageConverter ic = new ImageConverter(tmpIp);
-	                    	ic.convertToGray32();
-	         			} else tmpIp=spot_tpl;
-	        			ImageRoi imageRoi = new ImageRoi((int)coord_res[0] + xStart_free, (int)coord_res[1]+ yStart_free,tmpIp.getProcessor());
-	        	        imageRoi.setOpacity(0.3);
-	        	        overlay.addElement(imageRoi);
-	        			imp.setSlice(slice);
-	        			imp.setOverlay(overlay);
-	        			if (!autoSkip){
-		    				int failureAnswer = failureQuestionDlg("laser spot"); 
-		    				if (failureAnswer==0) adjustThreshold(coord_res[2], spot_mideal, method);
-		        			ignoreFrame = (failureAnswer==1);
-		        			stopTracking = (failureAnswer==2);
-	        			} else {
-	        				ignoreFrame=true;
-	        			}
-    				}
-        		}
-    			
-    			if (ignoreFrame) {
-    				if (!autoSkip && autoSkipCounter++==2) {
-    					autoSkipCounter=0;
-    					GenericDialog gd = new GenericDialog("Automatic Frame Skip");
-    			        gd.addMessage("It's time to think of automatic skip possibility...\n"//
-    			        		+"Bad frames will be skipped until the spot is found.\n"//
-    			        		+"Maximal size of the search area can be specified to save time.\n"//
-    			        		+"Default is 10*(initial search area), zero is for no limit");
-    			       
-    			        gd.addNumericField("Maximal size of the search area", sArea*10, 0);
+    			} else {
+    				//IJ.showMessage("Found in Area = " + sArea_new);
+    				newSpotPositionFound=true;
+    			}
+	            
+			}
+			
+			
+			
+			if (!newSpotPositionFound){
+				
+				overlay = new Overlay();
+				if (refBitDepth==24 && !matchIntensity) {
+     				tmpIp = spot_tpl.duplicate();
+     				ImageConverter ic = new ImageConverter(tmpIp);
+                	ic.convertToGray32();
+     			} else tmpIp=spot_tpl;
+    			ImageRoi imageRoi = new ImageRoi((int)coord_res[0] + xStart_spot, (int)coord_res[1]+ yStart_spot,tmpIp.getProcessor());
+    	        imageRoi.setOpacity(0.3);
+    	        overlay.addElement(imageRoi);
+    			imp.setSlice(slice);
+    			imp.setOverlay(overlay);
+    			if (!autoSkip){
+    				int failureAnswer = failureQuestionDlg("laser spot"); 
+    				if (failureAnswer==0) adjustThreshold(coord_res[2], spot_mideal, method);
+        			ignoreFrame = (failureAnswer==1);
+        			stopTracking = (failureAnswer==2);
+    			} else {
+    				ignoreFrame=true;
+    			}
+			}
+		}
+		
+		if (ignoreFrame) {
+			if (!autoSkip && autoSkipCounter++==2) {
+				autoSkipCounter=0;
+				GenericDialog gd = new GenericDialog("Automatic Frame Skip");
+		        gd.addMessage("It's time to think of automatic skip possibility...\n"//
+		        		+"Bad frames will be skipped until the spot is found.\n"//
+		        		+"Maximal size of the search area can be specified to save time.\n"//
+		        		+"Default is 10*(initial search area), zero is for no limit");
+		       
+		        gd.addNumericField("Maximal size of the search area", sArea*10, 0);
     			        
     			        gd.showDialog();
     			        if (gd.wasOKed()) autoSkip=true;
@@ -2261,21 +2175,22 @@ public int setup(String arg, ImagePlus imp) {
     	        if (stopTracking) return 2;
  
     	        //if (iter>0) spot_matchRes.remove(spot_matchRes.size()-1);
-    	        autoSkip=alwaysAutoSkip;
-    	        autoSkipCounter=0;
-    			spot_matchRes.add(coord_res[2]);
-    			
-    			disX_spot = coord_res[0] + xStart_free - spot_rect.x;
-                disY_spot = coord_res[1] + yStart_free - spot_rect.y;
-    			
-              //correct first estimation
-                if (firstPoint) {
-                    disX_spot0 = disX_spot;
-                    disY_spot0 = disY_spot;
-                }
-                
-                disX_spot -= disX_spot0;
-                disY_spot -= disY_spot0;
+        autoSkip=alwaysAutoSkip;
+        autoSkipCounter=0;
+		spot_matchRes.add(coord_res[2]);
+		
+		disX_spot = coord_res[0] + xStart_spot - spot_rect.x;
+        disY_spot = coord_res[1] + yStart_spot - spot_rect.y;
+		
+        //correct first estimation
+        // remove the correction!!!
+//        if (firstPoint) {
+//            disX_spot0 = disX_spot;
+//            disY_spot0 = disY_spot;
+//        }
+//        
+//        disX_spot -= disX_spot0;
+//        disY_spot -= disY_spot0;
             
             
             if(!firstPoint) anStep++;
@@ -2283,22 +2198,6 @@ public int setup(String arg, ImagePlus imp) {
 			
 			x_pix_list.add(refX_spot+disX_spot-disX_mark1);
 			y_pix_list.add(refY_spot+disY_spot-disY_mark1);
-		
-        
-        // the creation time of the image is taken from the EXIF metadata or incremented by timeStep
-        
-//        if (ExifTime)
-//        {
-//             Instant shot_time = getShotTime(imp.getOriginalFileInfo().directory + stack.getSliceLabel(slice));
-//             		 
-//        	if (shot_time!=null) seconds = Duration.between(first_shot_time, shot_time).toNanos()/1000000000.0;//(double)((new Duration(first_shot_time,shot_time)).getStandardSeconds());
-//        	else 
-//        	{	
-//        		ExifTime=false;
-//        		if (seconds!=0.0) seconds+=timeStep;
-//        	}
-//        }
-//        else seconds+=timeStep;
 			
 		if (exifTime)
         {
@@ -2387,17 +2286,17 @@ public int setup(String arg, ImagePlus imp) {
 		overlay.addElement(new Roi(xStart_mark3, yStart_mark3, sWX_mark3, sWY_mark3));
 		overlay.addElement(new Roi(xStart_mark4, yStart_mark4, sWX_mark4, sWY_mark4));
        
-        overlay.addElement(new Roi(xStart_free, yStart_free, sWX_free, sWY_free));
-        float[] xpf=new float[anStep+1], ypf=new float[anStep+1];
-        for (int displStep=0;displStep<anStep+1;displStep++)
+        overlay.addElement(new Roi(xStart_spot, yStart_spot, sWX_spot, sWY_spot));
+        float[] xpf = new float[anStep + 1], ypf = new float[anStep + 1];
+        for (int displStep = 0;displStep < anStep + 1;displStep++)
         {
         	
-        	xpf[displStep]=x_pix_list.get(displStep).floatValue()+(float)disX_mark1;
-        	ypf[displStep]=y_pix_list.get(displStep).floatValue()+(float)disY_mark1;
+        	xpf[displStep] = (float) (x_pix_list.get(displStep) + disX_mark1);
+        	ypf[displStep] = (float) (y_pix_list.get(displStep) + disY_mark1);
         	
         	
         }
-        PolygonRoi needle_line=new PolygonRoi(xpf,ypf,Roi.FREELINE);
+        PolygonRoi spot_trajectory = new PolygonRoi(xpf, ypf, Roi.FREELINE);
         /*
 		FloatPolygon flPol = needle_line.getFloatPolygon();
 				int nPoints=flPol.npoints;
@@ -2409,7 +2308,7 @@ public int setup(String arg, ImagePlus imp) {
 				IJ.showMessage(msgstr);
 				
 		*/
-        overlay.addElement(needle_line);
+        overlay.addElement(spot_trajectory);
 		imp.setSlice(slice);
         imp.setOverlay(overlay);
  
@@ -2419,46 +2318,31 @@ public int setup(String arg, ImagePlus imp) {
     private void calcDisplacement() {
     	
     	
-		dX_pix=disX_spot-disX_mark1;
-        dY_pix=disY_spot-disY_mark1;
+		dX_pix = disX_spot - disX_mark1;
+        dY_pix = disY_spot - disY_mark1;
         
         double  m1x=refX_mark1+disX_mark1,m1y=refY_mark1+disY_mark1,
         		m2x=refX_mark2+disX_mark2,m2y=refY_mark2+disY_mark2,
         		m3x=refX_mark3+disX_mark3,m3y=refY_mark3+disY_mark3,
         		m4x=refX_mark4+disX_mark4,m4y=refY_mark4+disY_mark4,
        
-        /*
-		ax=m4x-m1x,ay=m4y-m1y,
-		bx=m2x-m1x,by=m2y-m1y,
-		cx=m1x+m3x-m2x-m4x,cy=m1y+m3y-m2y-m4y,
-		a_invX,a_invY,a_inv_mod,
-		b_invX,b_invY,b_inv_mod,
-		rx=refX_spot+disX_spot-m1x, ry=refY_spot+disY_spot-m1y;
-				a_inv_mod=ax*by-ay*bx;
-				b_inv_mod=a_inv_mod;
-				a_invX=by/a_inv_mod;
-				a_invY=-bx/a_inv_mod;
-				b_invX=-ay/a_inv_mod;
-				b_invY=ax/a_inv_mod;
-		*/
-        	   a1x=m4x-m1x,a1y=m4y-m1y,
-               b1x=m2x-m1x,b1y=m2y-m1y,
-               a2x=m3x-m2x,a2y=m3y-m2y,
-               b2x=m3x-m4x,b2y=m3y-m4y,
-               
-               rx=refX_spot+disX_spot-m1x, ry=refY_spot+disY_spot-m1y,
-               
-               AX=a1x*(b1y-b2y)+a1y*(b2x-b1x),
-               BX=-a1x*b1y+a1y*b1x - rx*(b1y-b2y)-ry*(b2x-b1x),
-               CX=-rx*b1y+ry*b1x,
-               
-               
-               AY=b1x*(a1y-a2y)+b1y*(a2x-a1x),
-               BY=-b1x*a1y+b1y*a1x - rx*(a1y-a2y)-ry*(a2x-a1x),
-               CY=-rx*a1y+ry*a1x;
+        a1x=m4x-m1x,a1y=m4y-m1y,
+        b1x=m2x-m1x,b1y=m2y-m1y,
+        a2x=m3x-m2x,a2y=m3y-m2y,
+        b2x=m3x-m4x,b2y=m3y-m4y,
         
-        //double X_abs_new, Y_abs_new;
+        rx=refX_spot+disX_spot-m1x, ry=refY_spot+disY_spot-m1y,
         
+        AX=a1x*(b1y-b2y)+a1y*(b2x-b1x),
+        BX=-a1x*b1y+a1y*b1x - rx*(b1y-b2y)-ry*(b2x-b1x),
+        CX=-rx*b1y+ry*b1x,
+           
+           
+        AY=b1x*(a1y-a2y)+b1y*(a2x-a1x),
+        BY=-b1x*a1y+b1y*a1x - rx*(a1y-a2y)-ry*(a2x-a1x),
+        CY=-rx*a1y+ry*a1x;
+        
+                
         if (AX==0.0) {
         	x_abs=CX/BX*markDist;
         	y_abs=CY/BY*markDist;
@@ -2468,24 +2352,16 @@ public int setup(String arg, ImagePlus imp) {
         	x_abs=(DX-BX)/AX/2.0*markDist;
         	y_abs=(-DY-BY)/AY/2.0*markDist;
         }
-        
-        
-        //X_abs=(rx*a_invX+ry*a_invY)*(1.0-(cx*a_invX+cy*a_invY)*(rx*b_invX+ry*b_invY))*markDist;
-        //Y_abs=(rx*b_invX+ry*b_invY)*(1.0-(cx*b_invX+cy*b_invY)*(rx*a_invX+ry*a_invY))*markDist;
-        
+                
         if (firstPoint) {
-        	spotX0=x_abs;
-        	spotY0=y_abs;
-        	firstPoint=false;
+        	spotX0 = x_abs;
+        	spotY0 = y_abs;
+        	firstPoint = false;
         }
         
-        dX=x_abs-spotX0;
-        dY=y_abs-spotY0;
-        
-        
-        dL=Math.sqrt(dX*dX+dY*dY);
-        //if (dX<0) dL=-dL;
-        
+        double dX = x_abs - spotX0;
+        double dY = y_abs - spotY0;
+        dL = Math.sqrt(dX * dX + dY * dY);
     }
 
  
@@ -2693,7 +2569,7 @@ public int setup(String arg, ImagePlus imp) {
             coord[0]=0;
             coord[1]=0;
             double minmax=0.0;
-            boolean firstPointFound=false;
+            boolean firstPointFound = false;
             int sWh, sWw;
             sWh = resMat.rows();
             sWw = resMat.cols();
