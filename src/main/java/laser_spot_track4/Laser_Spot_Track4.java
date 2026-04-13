@@ -81,14 +81,17 @@ public class Laser_Spot_Track4 implements PlugInFilter, DialogListener {
     PointRoi proi_spot,proi_att,proi_mark1,proi_mark2,proi_mark3,proi_mark4;
     static final int matchMethodDefault = 5,
     		searchAreaDefault = 50,
-    		templSizeDefault = 120;
+    		templSizeDefault = 120,
+    		lastRefSliceDefault = 1;
     static final double markDistDefault = 100.0;
     static final boolean videoInputDefault = false;
     static final boolean autoSkipDefault = false;
+    static final boolean autoSetToLastSavedRefScliceDefault = false;
     static final boolean matchIntensityDefault = true;
     static final boolean subPixelDefault = true;
     
-    int method = matchMethodDefault, refSlice, sArea = searchAreaDefault, templSize = templSizeDefault, anStep = 0;
+    int method = matchMethodDefault, refSlice, sArea = searchAreaDefault, templSize = templSizeDefault, anStep = 0,
+            lastRefSlice = lastRefSliceDefault;
     double seconds=0, timeStep=1.0, markDist = markDistDefault;
     Instant first_shot_time; 
     int width, height, refBitDepth;
@@ -127,7 +130,8 @@ public class Laser_Spot_Track4 implements PlugInFilter, DialogListener {
     double spot_mideal, att_mideal, mark1_mideal, mark2_mideal, mark3_mideal, mark4_mideal;
     
     ImagePlus plotImage;
-    boolean folderMonitoring=true, updateTemplates=false, exifTime=true, autoSkip=autoSkipDefault, alwaysAutoSkip=autoSkipDefault;
+    boolean folderMonitoring = true, updateTemplates = false, exifTime = true, 
+            autoSkip = autoSkipDefault, alwaysAutoSkip = autoSkipDefault, autoSetToLastSavedRefSclice = autoSetToLastSavedRefScliceDefault;
     int autoSkipCounter=0, maxSArea=500;
     volatile WaitForUserDialog stopDlg=null, monitorDlg=null;
     volatile boolean trackFinished = false;
@@ -471,6 +475,11 @@ public class Laser_Spot_Track4 implements PlugInFilter, DialogListener {
 
         if (!getUserParameters()) return;
         
+        if (autoSetToLastSavedRefSclice) {
+            lastRefSlice = (int) Prefs.get("laserspottrack.lastRefSlice", lastRefSliceDefault);
+            imp.setSlice(lastRefSlice);
+        }
+        
         
         Overlay ov;
 		ImageProcessor ip_tmp;
@@ -478,14 +487,16 @@ public class Laser_Spot_Track4 implements PlugInFilter, DialogListener {
         ov = new Overlay();
         imp.setOverlay(ov);
         
-        refSlice = imp.getCurrentSlice();
-        ref_Image = new ImagePlus(stack.getSliceLabel(refSlice), stack.getProcessor(refSlice));
-        
-        
-        
-		IJ.setTool("point");
+        IJ.setTool("point");
         new WaitForUserDialog("Laser_Spot_Track4", "Select a point in the center of the spot...\nthen press OK.").show();
         
+        
+        refSlice = imp.getCurrentSlice();
+        Prefs.set("laserspottrack.lastRefSlice", refSlice);
+        
+        ref_Image = new ImagePlus(stack.getSliceLabel(refSlice), stack.getProcessor(refSlice));
+        
+                
         proi_spot = (PointRoi)imp.getRoi();
         if (proi_spot != null) {
         refX_spot = proi_spot.getFloatPolygon().xpoints[0];
@@ -533,7 +544,7 @@ public class Laser_Spot_Track4 implements PlugInFilter, DialogListener {
         
 		imp.killRoi();
 		
-		
+		IJ.run("Original Scale");
 		IJ.setTool("point");
         new WaitForUserDialog("Laser_Spot_Track4", "Select a point in the center of the Mark1...\nthen press OK.").show();
         
@@ -567,7 +578,7 @@ public class Laser_Spot_Track4 implements PlugInFilter, DialogListener {
         
         imp.killRoi();
 		
-		
+        IJ.run("Original Scale");
 		IJ.setTool("point");
         new WaitForUserDialog("Laser_Spot_Track4", "Select a point in the center of the Mark2...\nthen press OK.").show();
         
@@ -600,7 +611,7 @@ public class Laser_Spot_Track4 implements PlugInFilter, DialogListener {
         mark2_mideal = doMatch_test(mark2_ref.getProcessor(),(method==0?2:method));
         imp.killRoi();
 		
-		
+        IJ.run("Original Scale");
 		IJ.setTool("point");
         new WaitForUserDialog("Laser_Spot_Track4", "Select a point in the center of the Mark3...\nthen press OK.").show();
         
@@ -633,7 +644,7 @@ public class Laser_Spot_Track4 implements PlugInFilter, DialogListener {
         mark3_mideal = doMatch_test(mark3_ref.getProcessor(),(method==0?2:method));
         imp.killRoi();
 		
-		
+        IJ.run("Original Scale");
 		IJ.setTool("point");
         new WaitForUserDialog("Laser_Spot_Track4", "Select a point in the center of the Mark4...\nthen press OK.").show();
         
@@ -664,6 +675,8 @@ public class Laser_Spot_Track4 implements PlugInFilter, DialogListener {
         ip_tmp = mark4_ref.getProcessor();
         gaussianBlur.blurGaussian(ip_tmp, 2, 2, 0.02);
         mark4_mideal= doMatch_test(mark4_ref.getProcessor(),(method==0?2:method));
+        
+        IJ.run("Original Scale");
 		
         int defaultPrecision = Analyzer.getPrecision();
         Analyzer.setPrecision(6);    
@@ -790,7 +803,7 @@ public class Laser_Spot_Track4 implements PlugInFilter, DialogListener {
         
 		
 		trackFinished = false;
-        for (int i = refSlice + 1; i < stack.getSize() + 1; i+=trackStep) {    
+        for (int i = refSlice + 1; i < stack.getSize() + 1; i += trackStep) {    
         	
         	if (!StopThread.isAlive()) {
         		//new WaitForUserDialog("Laser Spot Track4", "The track is finished.").show();
@@ -827,8 +840,10 @@ public class Laser_Spot_Track4 implements PlugInFilter, DialogListener {
 							tmp_disY_mark3=disY_mark3,
 							tmp_disX_mark4=disX_mark4,
 							tmp_disY_mark4=disY_mark4;
-							
-				    int matchresult = analyseSlice(i, stack.getProcessor(i));
+					
+					ImageProcessor nextSlice = stack.getProcessor(i);
+					//if((i - refSlice - 1) % trackStep != 0 ) continue;
+					int matchresult = analyseSlice(i, nextSlice);
 					if (matchresult==1) {
 							disX_spot=tmp_disX_spot;
 							disY_spot=tmp_disY_spot;
@@ -2372,6 +2387,7 @@ public class Laser_Spot_Track4 implements PlugInFilter, DialogListener {
     	//get saved parameters
     	method = (int) Prefs.get("laserspottrack.matchMethod", matchMethodDefault);
     	alwaysAutoSkip = (boolean) Prefs.get("laserspottrack.autoSkip", autoSkipDefault);
+    	autoSetToLastSavedRefSclice = (boolean) Prefs.get("laserspottrack.autoSetToLastSavedRefSclice", autoSetToLastSavedRefScliceDefault);
     	sArea = (int) Prefs.get("laserspottrack.searchArea", searchAreaDefault);
     	templSize = (int) Prefs.get("laserspottrack.templateSize", templSizeDefault);
     	markDist = (double) Prefs.get("laserspottrack.markDist", markDistDefault);
@@ -2393,6 +2409,7 @@ public class Laser_Spot_Track4 implements PlugInFilter, DialogListener {
         gd.addCheckbox("Subpixel registration", subPixel);
         gd.addCheckbox("Match RGB images using intensity", matchIntensity);
         gd.addCheckbox("Always skip frames with bad match", alwaysAutoSkip);
+        gd.addCheckbox("Automatic setting to the last selected reference slice ", autoSetToLastSavedRefSclice);
         //gd.addChoice("Interpolation method for subpixel translation", itpMethods, itpMethods[itpMethod]);
        
         //gd.addCheckbox("update templates?", false);
@@ -2407,6 +2424,7 @@ public class Laser_Spot_Track4 implements PlugInFilter, DialogListener {
         subPixel = gd.getNextBoolean();
         matchIntensity  = gd.getNextBoolean();
         alwaysAutoSkip = gd.getNextBoolean();
+        autoSetToLastSavedRefSclice = gd.getNextBoolean();
         //itpMethod = gd.getNextChoiceIndex();
         //updateTemplates = gd.getNextBoolean();
         showRT = true;
@@ -2414,6 +2432,7 @@ public class Laser_Spot_Track4 implements PlugInFilter, DialogListener {
         //save parameters
         Prefs.set("laserspottrack.matchMethod", method);
         Prefs.set("laserspottrack.autoSkip", alwaysAutoSkip);
+        Prefs.set("laserspottrack.autoSetToLastSavedRefSclice", autoSetToLastSavedRefSclice);
     	Prefs.set("laserspottrack.searchArea", sArea);
     	Prefs.set("laserspottrack.templateSize", templSize);
     	Prefs.set("laserspottrack.markDist", markDist);
